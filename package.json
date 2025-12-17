@@ -1,0 +1,36 @@
+{
+  "name": "hyblock-quiz-dapp",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "next lint",
+    "compile": "hardhat compile",
+    "test": "hardhat test",
+    "deploy": "hardhat run scripts/deploy.js",
+    "deploy:sepolia": "hardhat run scripts/deploy.js --network sepolia",
+    "setup-questions": "hardhat run scripts/setup-questions.js",
+    "check-status": "hardhat run scripts/check-status.js",
+    "check-leaderboard": "hardhat run scripts/check-leaderboard.js",
+    "local-deploy": "hardhat run scripts/deploy.js --network localhost"
+  },
+  "dependencies": {
+    "next": "14.0.4",
+    "react": "^18",
+    "react-dom": "^18",
+    "ethers": "^6.8.1"
+  },
+  "devDependencies": {
+    "@types/node": "^20",
+    "@types/react": "^18",
+    "@types/react-dom": "^18",
+    "eslint": "^8",
+    "eslint-config-next": "14.0.4",
+    "typescript": "^5",
+    "@nomicfoundation/hardhat-toolbox": "^4.0.0",
+    "hardhat": "^2.19.2",
+    "dotenv": "^16.3.1"
+  }
+}

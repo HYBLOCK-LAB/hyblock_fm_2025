@@ -1,0 +1,27 @@
+[
+  {
+    "text": "블록체인 기술의 핵심 특징은 무엇인가요?",
+    "options": ["중앙 집중화", "변경 불가능성", "빠른 처리 속도", "낮은 에너지 소비"],
+    "answerIndex": 1
+  },
+  {
+    "text": "NFT(Non-Fungible Token)의 주요 특징은?",
+    "options": ["대체 가능성", "고정된 가격", "유니크한 소유권", "무제한 복제"],
+    "answerIndex": 2
+  },
+  {
+    "text": "스마트 컨트랙트의 장점으로 옳지 않은 것은?",
+    "options": ["자동 실행", "투명성", "중개자 불필요", "언제든 수정 가능"],
+    "answerIndex": 3
+  },
+  {
+    "text": "메타버스에서 블록체인이 활용되는 분야는?",
+    "options": ["디지털 자산 소유권", "가상현실 그래픽", "네트워크 속도 향상", "하드웨어 최적화"],
+    "answerIndex": 0
+  },
+  {
+    "text": "DAO(Decentralized Autonomous Organization)의 핵심은?",
+    "options": ["CEO 중심 운영", "토큰 기반 거버넌스", "정부 규제 준수", "중앙화된 의사결정"],
+    "answerIndex": 1
+  }
+]
