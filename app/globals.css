@@ -147,21 +147,22 @@ body::before {
   position: sticky;
   top: 0;
   z-index: 100;
-  background: rgba(10, 10, 11, 0.95);
+  background: linear-gradient(135deg, rgba(10, 10, 11, 0.96), rgba(15, 18, 30, 0.96));
   backdrop-filter: blur(20px);
   border-bottom: 1px solid rgba(255, 255, 255, 0.1);
-  box-shadow: 0 4px 32px rgba(0, 0, 0, 0.4);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
 }
 
 .header-content {
   max-width: 1200px;
   margin: 0 auto;
-  padding: 10px 16px;
+  padding: 12px 16px;
   display: flex;
+  flex-direction: row;
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
 }
 
 .header-brand {
@@ -169,6 +170,7 @@ body::before {
   align-items: center;
   gap: 0;
   animation: slide-in-right 0.6s ease-out;
+  flex: 1 1 auto;
 }
 
 .header-logo-wrap {
@@ -204,10 +206,21 @@ body::before {
 
 .header-actions {
   display: flex;
+  flex-direction: row;
   align-items: center;
-  gap: 12px;
-  flex-wrap: wrap;
+  gap: 8px;
+  flex-wrap: nowrap;
   justify-content: flex-end;
+  margin-top: 0;
+  flex: 1 1 auto;
+}
+
+.header-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  flex: 1 1 100%;
 }
 
 .header-mobile-toggle {
@@ -221,6 +234,13 @@ body::before {
   align-items: center;
   justify-content: center;
   font-size: 20px;
+}
+
+.header-actions .btn-secondary,
+.header-actions .btn-primary {
+  min-width: auto;
+  text-align: center;
+  padding: 12px 16px;
 }
 
 .score-display {
@@ -252,6 +272,7 @@ body::before {
 .wallet-trigger {
   display: flex;
   align-items: center;
+  height: 100%;
   gap: 8px;
   padding: 8px 14px;
   background: var(--surface);
@@ -259,6 +280,7 @@ body::before {
   border-radius: 12px;
   cursor: pointer;
   transition: all 0.3s ease;
+
 }
 
 .wallet-trigger:hover {
@@ -556,6 +578,14 @@ body::before {
   transform: translateY(-1px);
 }
 
+.btn-disabled,
+.btn-primary:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+  box-shadow: none;
+  transform: none;
+}
+
 .btn-secondary {
   display: inline-flex;
   align-items: center;
@@ -810,6 +840,99 @@ body::before {
   animation: shimmer 2s infinite;
 }
 
+/* Generic card fallback */
+.card {
+  background: rgba(12, 14, 20, 0.9);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 16px;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.35);
+}
+
+.question-meta {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+.question-meta .badge {
+  padding: 6px 10px;
+  border-radius: 10px;
+  font-size: 12px;
+  border: 1px solid var(--border);
+  background: rgba(255,255,255,0.05);
+}
+
+/* Accordion */
+.accordion {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.accordion-item {
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: #0f1118;
+  overflow: hidden;
+  box-shadow: 0 10px 30px rgba(0,0,0,0.35);
+}
+
+.accordion-header {
+  width: 100%;
+  display: flex;
+  justify-content: flex-start;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 14px 18px;
+  background: #0f1118;
+  border: none;
+  color: var(--text-primary);
+  cursor: pointer;
+  text-align: left;
+  transition: background 0.2s ease, border-color 0.2s ease;
+  appearance: none;
+  -webkit-appearance: none;
+}
+
+.accordion-header:hover {
+  background: rgba(255,255,255,0.06);
+  border-color: rgba(255,255,255,0.12);
+}
+
+.accordion-icon {
+  margin-left: auto;
+  font-size: 18px;
+  width: 34px;
+  height: 34px;
+  border-radius: 12px;
+  display: grid;
+  place-items: center;
+  background: rgba(255,255,255,0.08);
+  border: 1px solid rgba(255,255,255,0.12);
+}
+
+.accordion-content {
+  padding: 0 18px 16px;
+  border-top: 1px solid var(--border);
+  background: #0f1118;
+}
+
+.accordion-item.is-disabled {
+  opacity: 0.6;
+  filter: grayscale(0.2);
+}
+
+.accordion-header.is-disabled {
+  cursor: not-allowed;
+  pointer-events: none;
+}
+
+.accordion-header.is-disabled .accordion-icon {
+  opacity: 0.6;
+}
+
 /* Utility Classes */
 .code-font {
   font-family: 'JetBrains Mono', 'Consolas', monospace;
@@ -824,6 +947,12 @@ body::before {
 .w-full { width: 100%; }
 .h-full { height: 100%; }
 .overflow-hidden { overflow: hidden; }
+.text-success { color: var(--success); }
+
+.question-disabled {
+  opacity: 0.65;
+  filter: grayscale(0.2);
+}
 
 /* Responsive Design */
 @media (max-width: 1024px) {
@@ -831,16 +960,48 @@ body::before {
     grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
     gap: 24px;
   }
-  
+
   .header-content {
-    padding: 10px 14px;
-    gap: 10px;
+    flex-direction: column;
+    align-items: stretch;
+    justify-content: flex-start;
+    flex-wrap: nowrap;
+    gap: 12px;
+    padding: 12px 14px;
   }
-  
+
+  .header-top {
+    width: 100%;
+    justify-content: space-between;
+  }
+
+  .header-brand {
+    width: 100%;
+    flex: 1 1 auto;
+  }
+
   .header-actions {
+    width: 100%;
+    justify-content: flex-end;
+    flex-wrap: wrap;
+    flex-direction: column;
+    align-items: stretch;
     gap: 10px;
+    margin-top: 6px;
   }
-  
+
+  .header-mobile-toggle {
+    display: inline-flex;
+  }
+
+  .header-actions.is-closed {
+    display: none;
+  }
+
+  .header-actions.is-open {
+    display: flex;
+  }
+
   .hero-section {
     padding: 100px 0 60px;
   }
@@ -895,21 +1056,27 @@ body::before {
 /* Extra-small devices */
 @media (max-width: 640px) {
   .header-content {
-    flex-direction: row;
-    align-items: center;
-    justify-content: space-between;
-    gap: 10px;
+    flex-direction: column;
+    align-items: stretch;
+    justify-content: flex-start;
+    flex-wrap: nowrap;
+    gap: 12px;
     padding: 12px 14px;
   }
 
   .header-brand {
-    width: auto;
-    justify-content: flex-start;
-  }
-  
-  .header-actions {
     width: 100%;
     justify-content: flex-start;
+    flex: 1 1 auto;
+  }
+  
+  .header-top {
+    width: 100%;
+  }
+
+  .header-actions {
+    width: 100%;
+    justify-content: flex-end;
     flex-wrap: wrap;
     gap: 10px;
     flex-direction: column;
@@ -932,12 +1099,23 @@ body::before {
   .score-display,
   .wallet-trigger {
     width: 100%;
-    justify-content: space-between;
+    justify-content: flex-start;
   }
   
   .wallet-dropdown {
     width: 100%;
     min-width: unset;
+  }
+
+  /* Accordion tweaks */
+  .accordion-item {
+    border-radius: 12px;
+  }
+  .accordion-header {
+    padding: 12px 14px;
+  }
+  .accordion-content {
+    padding: 0 14px 14px;
   }
   
   .hero-section {

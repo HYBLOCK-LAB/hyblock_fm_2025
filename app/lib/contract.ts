@@ -5,7 +5,8 @@ export const QUIZ_GAME_ABI = [
   // Events
   "event PlayerRegistered(address indexed player, string name)",
   "event NameChanged(address indexed player, string newName)",
-  "event AnswerSubmitted(address indexed player, uint256 indexed questionId, bool isCorrect)",
+  "event AnswerSubmitted(address indexed player, uint256 indexed questionId)",
+  "event AnswerEvaluated(address indexed player, uint256 indexed questionId, bool isCorrect)",
   "event ScoreUpdated(address indexed player, uint256 newScore)",
   "event AnswerRevealed(uint256 indexed questionId, uint8 correctAnswer, bytes32 salt)",
   
@@ -25,6 +26,7 @@ export const QUIZ_GAME_ABI = [
   "function getQuestionState(uint256 _questionId) public view returns (bool isActive, bool isRevealed, address creator)",
   "function submitAnswer(uint256 _questionId, uint8 _answer) public",
   "function hasPlayerAnswered(uint256 _questionId, address _player) public view returns (bool)",
+  "function getCorrectAnswer(uint256 _questionId) public view returns (uint8)",
   
   // Score functions
   "function getMyScore() public view returns (uint256)",
@@ -150,6 +152,10 @@ export class QuizGameContract {
 
   onAnswerRevealed(callback: (questionId: bigint, correctAnswer: number, salt: string) => void) {
     this.contract.on('AnswerRevealed', callback)
+  }
+
+  onAnswerEvaluated(callback: (player: string, questionId: bigint, isCorrect: boolean) => void) {
+    this.contract.on('AnswerEvaluated', callback)
   }
 
   // Remove all listeners

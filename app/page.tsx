@@ -30,9 +30,16 @@ export default function Home() {
     try {
       const registered = await gameContract.hasRegistered(address)
       setIsRegistered(registered)
+      if (registered) {
+        const name = await gameContract.getMyName()
+        setPlayerName(name)
+      } else {
+        setPlayerName('')
+      }
     } catch (error) {
       console.error('Error checking registration:', error)
       setIsRegistered(false)
+      setPlayerName('')
     }
   }
 
@@ -61,6 +68,10 @@ export default function Home() {
 
   const handleRegistrationComplete = () => {
     setIsRegistered(true)
+    // reload name after registration succeeds
+    if (contract) {
+      contract.getMyName().then(setPlayerName).catch(() => setPlayerName(''))
+    }
   }
 
   const handleDisconnect = () => {
@@ -256,6 +267,7 @@ export default function Home() {
               contract={contract}
               userAddress={userAddress}
               onScoreUpdate={(newScore) => setScore(newScore)}
+              provider={provider}
             />
           )}
         </div>

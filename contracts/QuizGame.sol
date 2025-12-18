@@ -18,6 +18,7 @@ contract QuizGame {
     error EmptyAnswerHash();
     error NotCreator();
     error CreatorCannotAnswer();
+    error AnswerLimitReached();
 
     uint256 private constant SCORE_REWARD = 10;
     uint8 private constant UNSET_ANSWER = type(uint8).max;
@@ -43,6 +44,8 @@ contract QuizGame {
 
     mapping(address => uint256) public playerScores;
     mapping(uint256 => mapping(address => bool)) public hasAnswered;
+    mapping(uint256 => mapping(address => uint8)) public playerAnswers; // submitted answers (0-3)
+    mapping(uint256 => address[]) private answerParticipants; // players who submitted per question
 
     // Events
     event PlayerRegistered(address indexed player, string name);
@@ -51,11 +54,7 @@ contract QuizGame {
         string questionText,
         address indexed creator
     );
-    event AnswerSubmitted(
-        address indexed player,
-        uint256 indexed questionId,
-        bool isCorrect
-    );
+    event AnswerSubmitted(address indexed player, uint256 indexed questionId);
     event ScoreUpdated(address indexed player, uint256 newScore);
     event QuestionStatusChanged(uint256 indexed questionId, bool isActive);
     event NameChanged(address indexed player, string newName);
@@ -106,13 +105,13 @@ contract QuizGame {
         emit NameChanged(msg.sender, _newName);
     }
 
-    // 문제 추가 (출제자 1인: owner만)
+    // 문제 추가
     // _answerHash = keccak256(abi.encode(correctAnswerIndex, salt))
     function addQuestion(
         string memory _questionText,
         string[4] memory _options,
         bytes32 _answerHash
-    ) public onlyOwner {
+    ) public {
         if (bytes(_questionText).length == 0) revert EmptyQuestion();
         if (_answerHash == bytes32(0)) revert EmptyAnswerHash();
         for (uint256 i = 0; i < 4; i++) {
@@ -153,10 +152,23 @@ contract QuizGame {
 
         playerScores[msg.sender] += SCORE_REWARD;
         emit ScoreUpdated(msg.sender, playerScores[msg.sender]);
+
+        // Bounded scoring loop (max 20 submissions per question)
+        address[] storage participants = answerParticipants[_questionId];
+        uint256 len = participants.length;
+        for (uint256 i = 0; i < len; i++) {
+            address player = participants[i];
+            uint8 submitted = playerAnswers[_questionId][player];
+            if (submitted == _correctAnswer) {
+                playerScores[player] += SCORE_REWARD;
+                emit ScoreUpdated(player, playerScores[player]);
+            }
+        }
+
         emit AnswerRevealed(_questionId, _correctAnswer, _salt);
     }
 
-    // 답안 제출 (리빌된 문제만)
+    // 답안 제출 (리빌 전에만 허용, 제출 수 20개 제한, 동일 주소 중복 제출 불가)
     function submitAnswer(
         uint256 _questionId,
         uint8 _answer
@@ -165,18 +177,15 @@ contract QuizGame {
         if (questions[_questionId].creator == msg.sender)
             revert CreatorCannotAnswer();
         if (hasAnswered[_questionId][msg.sender]) revert AlreadyAnswered();
-        if (!questions[_questionId].isRevealed) revert QuestionNotRevealed();
+        if (questions[_questionId].isRevealed) revert AlreadyRevealed();
+        if (answerParticipants[_questionId].length >= 20)
+            revert AnswerLimitReached(); // limit submissions per question
 
         hasAnswered[_questionId][msg.sender] = true;
+        playerAnswers[_questionId][msg.sender] = _answer;
+        answerParticipants[_questionId].push(msg.sender);
 
-        bool isCorrect = (questions[_questionId].correctAnswer == _answer);
-
-        if (isCorrect) {
-            playerScores[msg.sender] += SCORE_REWARD;
-            emit ScoreUpdated(msg.sender, playerScores[msg.sender]);
-        }
-
-        emit AnswerSubmitted(msg.sender, _questionId, isCorrect);
+        emit AnswerSubmitted(msg.sender, _questionId);
     }
 
     // 문제 조회 함수 (정답 제외)
@@ -243,10 +252,8 @@ contract QuizGame {
         return hasAnswered[_questionId][_player];
     }
 
-    // 정답 확인 (관리자만 가능, 리빌 후)
-    function getCorrectAnswer(
-        uint256 _questionId
-    ) public view onlyOwner returns (uint8) {
+    // 정답 확인 (리빌 후)
+    function getCorrectAnswer(uint256 _questionId) public view returns (uint8) {
         if (_questionId >= questionCount) revert QuestionNotFound();
         if (!questions[_questionId].isRevealed) revert QuestionNotRevealed();
         return questions[_questionId].correctAnswer;

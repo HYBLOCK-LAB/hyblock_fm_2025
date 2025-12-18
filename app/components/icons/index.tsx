@@ -83,4 +83,12 @@ export function InfoIcon({ size, className, strokeWidth = 1.6 }: IconProps) {
   )
 }
 
+export function CheckIcon({ size, className, strokeWidth = 1.6 }: IconProps) {
+  return (
+    <svg {...svgProps(size, className)} stroke="currentColor">
+      <path d="M5 13l4 4L19 7" strokeWidth={strokeWidth} />
+    </svg>
+  )
+}
+
 export type { IconProps }

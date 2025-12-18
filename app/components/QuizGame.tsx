@@ -1,12 +1,17 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { QuizGameContract, QuestionData, QuestionState } from '../lib/contract'
+import { ethers } from 'ethers'
+import { QuizGameContract, QuestionData, QuestionState, QUIZ_GAME_ABI } from '../lib/contract'
+import Accordion from './ui/Accordion'
+import { CheckIcon } from './icons'
+import Button from './ui/Button'
 
 interface QuizGameProps {
   contract: QuizGameContract | null
   userAddress: string
   onScoreUpdate?: (score: number) => void
+  provider?: ethers.BrowserProvider | null
 }
 
 interface GameState {
@@ -15,6 +20,7 @@ interface GameState {
   questionId: number
   question: QuestionData | null
   questionState: QuestionState | null
+  correctAnswerIndex: number | null
   hasAnswered: boolean
   selectedAnswer: number | null
   isSubmitting: boolean
@@ -22,13 +28,14 @@ interface GameState {
   showResult: boolean
 }
 
-export default function QuizGame({ contract, userAddress, onScoreUpdate }: QuizGameProps) {
+export default function QuizGame({ contract, userAddress, onScoreUpdate, provider }: QuizGameProps) {
   const [gameState, setGameState] = useState<GameState>({
     playerName: '',
     currentScore: 0,
-    questionId: 5, // Start from the first custom question
+    questionId: 0, // start from the first question by default
     question: null,
     questionState: null,
+    correctAnswerIndex: null,
     hasAnswered: false,
     selectedAnswer: null,
     isSubmitting: false,
@@ -36,7 +43,13 @@ export default function QuizGame({ contract, userAddress, onScoreUpdate }: QuizG
     showResult: false
   })
   const [error, setError] = useState<string>('')
-  const [isLoading, setIsLoading] = useState(true)
+const [isLoading, setIsLoading] = useState(true)
+  const [questionList, setQuestionList] = useState<
+    { id: number; data: QuestionData; state: QuestionState; correct: number | null; answered: boolean }[]
+  >([])
+  const [userSelections, setUserSelections] = useState<Record<number, number | null>>({})
+const [revealInputs, setRevealInputs] = useState<Record<number, { answer: number | null }>>({})
+  const [revealingId, setRevealingId] = useState<number | null>(null)
 
   // Initialize game data
   useEffect(() => {
@@ -47,14 +60,22 @@ export default function QuizGame({ contract, userAddress, onScoreUpdate }: QuizG
 
   // Set up event listeners
   useEffect(() => {
-    const handleAnswerSubmitted = (player: string, questionId: bigint, isCorrect: boolean) => {
+    const handleAnswerSubmitted = (player: string, questionId: bigint) => {
       if (player.toLowerCase() === userAddress.toLowerCase()) {
-        console.log('Answer submitted event:', player, questionId, isCorrect)
+        console.log('Answer submitted event:', player, questionId)
+        const qId = Number(questionId)
+        setQuestionList((prev) =>
+          prev.map((q) =>
+            q.id === qId
+              ? { ...q, answered: true }
+              : q
+          )
+        )
         setGameState(prev => ({
           ...prev,
           isSubmitting: false,
-          isCorrect,
-          showResult: true
+          hasAnswered: prev.questionId === qId ? true : prev.hasAnswered,
+          showResult: false
         }))
       }
     }
@@ -71,9 +92,64 @@ export default function QuizGame({ contract, userAddress, onScoreUpdate }: QuizG
       }
     }
 
+    const handleAnswerRevealed = (questionId: bigint, correctAnswer: number | bigint) => {
+      const qId = Number(questionId)
+      const num =
+        typeof correctAnswer === 'number'
+          ? correctAnswer
+          : typeof correctAnswer === 'bigint'
+            ? Number(correctAnswer)
+            : null
+      setQuestionList((prev) =>
+        prev.map((q) =>
+          q.id === qId
+            ? {
+                ...q,
+                state: { ...q.state, isRevealed: true },
+                correct: num !== null ? num : q.correct,
+              }
+            : q
+        )
+      )
+      setGameState((prev) =>
+        prev.questionId === qId
+          ? {
+              ...prev,
+              questionState: prev.questionState ? { ...prev.questionState, isRevealed: true } : prev.questionState,
+              correctAnswerIndex: num !== null ? num : prev.correctAnswerIndex,
+              isCorrect:
+                prev.hasAnswered && num !== null && userSelections[qId] !== undefined && userSelections[qId] !== null
+                  ? userSelections[qId] === num
+                  : prev.isCorrect,
+              showResult:
+                prev.hasAnswered && userSelections[qId] !== undefined && userSelections[qId] !== null
+                  ? true
+                  : prev.showResult,
+            }
+          : prev
+      )
+      setRevealingId((prev) => (prev === qId ? null : prev))
+    }
+
+    const handleAnswerEvaluated = (player: string, questionId: bigint, isCorrect: boolean) => {
+      if (player.toLowerCase() !== userAddress.toLowerCase()) return
+      const qId = Number(questionId)
+      setGameState((prev) =>
+        prev.questionId === qId
+          ? { ...prev, isCorrect, showResult: true }
+          : prev
+      )
+    }
+
     if (contract) {
       contract.onAnswerSubmitted(handleAnswerSubmitted)
       contract.onScoreUpdated(handleScoreUpdated)
+      contract.onAnswerRevealed(handleAnswerRevealed)
+      try {
+        contract.onAnswerEvaluated(handleAnswerEvaluated)
+      } catch (err) {
+        console.warn('Failed to attach AnswerEvaluated listener (ABI mismatch?):', err)
+      }
     }
 
     return () => {
@@ -94,22 +170,91 @@ export default function QuizGame({ contract, userAddress, onScoreUpdate }: QuizG
 
     try {
       // Load player data
-      const [name, score] = await Promise.all([
+      const [name, score, questionCountBig] = await Promise.all([
         contract.getMyName(),
-        contract.getMyScore()
+        contract.getMyScore(),
+        contract.getQuestionCount()
       ])
 
-      // Check if question exists and load it
-      const questionCount = await contract.getQuestionCount()
-      if (questionCount === BigInt(0)) {
+      const questionCount = Number(questionCountBig)
+      if (questionCount === 0) {
         throw new Error('No questions available')
       }
 
-      const [questionData, questionState, hasAnswered] = await Promise.all([
-        contract.getQuestion(gameState.questionId),
-        contract.getQuestionState(gameState.questionId),
-        contract.hasPlayerAnswered(gameState.questionId, userAddress)
-      ])
+      const total = Number(questionCount)
+      const iface = new ethers.Interface(QUIZ_GAME_ABI)
+      const answerEvent = iface.getEvent('AnswerRevealed')
+      const answerTopic = answerEvent?.topicHash
+
+      const fetched: {
+        id: number
+        data: QuestionData
+        state: QuestionState
+        correct: number | null
+        answered: boolean
+      }[] = []
+
+      // helper to fetch correct answer from AnswerRevealed logs within a safe window
+      const getCorrectAnswer = async (questionId: number): Promise<number | null> => {
+        if (!provider || !answerTopic) return null
+        try {
+          const latest = await provider.getBlockNumber()
+          const window = 5000 // per-request window to stay within RPC limit
+          const maxChunks = 5   // search up to 5 windows (~25k blocks)
+
+          let toBlock = latest
+          let searched = 0
+          while (toBlock >= 0 && searched < maxChunks) {
+            const fromBlock = toBlock >= window ? toBlock - window + 1 : 0
+            try {
+              const logs = await provider.getLogs({
+                address: contract.getAddress(),
+                topics: [answerTopic, ethers.zeroPadValue(ethers.toBeHex(questionId), 32)],
+                fromBlock,
+                toBlock,
+              })
+              if (logs.length > 0) {
+                const parsed = iface.parseLog(logs[logs.length - 1])
+                const raw = parsed?.args?.correctAnswer
+                const num =
+                  typeof raw === 'number'
+                    ? raw
+                    : typeof raw === 'bigint'
+                      ? Number(raw)
+                      : null
+                if (num !== null && !Number.isNaN(num)) {
+                  return num
+                }
+              }
+            } catch (err) {
+              console.warn('Failed to fetch answer log chunk', { questionId, fromBlock, toBlock, err })
+              break
+            }
+
+            if (fromBlock === 0) break
+            toBlock = fromBlock - 1
+            searched += 1
+          }
+        } catch (err) {
+          console.warn('Failed to fetch answer log for question', questionId, err)
+        }
+        return null
+      }
+
+      for (let i = 0; i < total; i++) {
+        const [state, data, answered] = await Promise.all([
+          contract.getQuestionState(i),
+          contract.getQuestion(i),
+          contract.hasPlayerAnswered(i, userAddress)
+        ])
+
+        const correct = state.isRevealed ? await getCorrectAnswer(i) : null
+        fetched.push({ id: i, data, state, correct, answered })
+      }
+
+      const activeList = fetched.filter((q) => q.state.isActive)
+      const listToUse = activeList.length > 0 ? activeList : fetched // fallback to all if none active
+      const latest = listToUse[listToUse.length - 1]
 
       const scoreNumber = Number(score);
       onScoreUpdate?.(scoreNumber);
@@ -118,13 +263,16 @@ export default function QuizGame({ contract, userAddress, onScoreUpdate }: QuizG
         ...prev,
         playerName: name,
         currentScore: scoreNumber,
-        question: questionData,
-        questionState,
-        hasAnswered
+        questionId: latest.id,
+        question: latest.data,
+        questionState: latest.state,
+        hasAnswered: latest.answered,
+        correctAnswerIndex: latest.correct
       }))
+      setQuestionList(listToUse)
     } catch (error: any) {
       console.error('Error initializing game:', error)
-      setError('Failed to load quiz data. Please try again.')
+      setError(error?.message || 'Failed to load quiz data. Please try again.')
     } finally {
       setIsLoading(false)
     }
@@ -137,6 +285,43 @@ export default function QuizGame({ contract, userAddress, onScoreUpdate }: QuizG
       ...prev,
       selectedAnswer: answerIndex
     }))
+    setUserSelections((prev) => ({ ...prev, [gameState.questionId]: answerIndex }))
+  }
+
+  const handleRevealSelect = (questionId: number, answerIndex: number) => {
+    setRevealInputs((prev) => ({
+      ...prev,
+      [questionId]: { answer: answerIndex }
+    }))
+  }
+
+  const handleRevealSubmit = async (questionId: number) => {
+    if (!contract) return
+    const entry = revealInputs[questionId] || { answer: null }
+    const answerNum = entry.answer
+    if (answerNum === null || answerNum < 0 || answerNum > 3) {
+      setError('Correct answer must be 0-3 before revealing.')
+      return
+    }
+
+    try {
+      setRevealingId(questionId)
+      setError('')
+      const salt = ethers.hexlify(ethers.zeroPadValue(userAddress, 32))
+      const tx = await contract.revealAnswer(questionId, answerNum, salt)
+      console.log('Reveal tx:', tx.hash)
+      await tx.wait()
+      console.log('Reveal confirmed')
+    } catch (err: any) {
+      console.error('Reveal failed:', err)
+      if (err.code === 'ACTION_REJECTED' || err.code === 4001) {
+        setError('Reveal transaction rejected.')
+      } else {
+        setError(err?.shortMessage || err?.message || 'Failed to reveal answer.')
+      }
+    } finally {
+      setRevealingId((prev) => (prev === questionId ? null : prev))
+    }
   }
 
   const handleAnswerSubmit = async () => {
@@ -150,6 +335,17 @@ export default function QuizGame({ contract, userAddress, onScoreUpdate }: QuizG
       console.log('Answer submission transaction:', tx.hash)
       await tx.wait()
       console.log('Answer submission confirmed')
+      setQuestionList((prev) =>
+        prev.map((q) =>
+          q.id === gameState.questionId ? { ...q, answered: true } : q
+        )
+      )
+      setGameState((prev) => ({
+        ...prev,
+        isSubmitting: false,
+        hasAnswered: true,
+        showResult: false
+      }))
     } catch (error: any) {
       console.error('Error submitting answer:', error)
       setGameState(prev => ({ ...prev, isSubmitting: false }))
@@ -161,14 +357,19 @@ export default function QuizGame({ contract, userAddress, onScoreUpdate }: QuizG
         setGameState(prev => ({ ...prev, hasAnswered: true }))
       } else if (error.message?.includes('QuestionNotRevealed')) {
         setError('This question has not been revealed yet. Please wait for the admin to reveal the answer.')
+      } else if (error.message?.includes('AlreadyRevealed')) {
+        setError('This question is already revealed. Submissions are closed.')
+      } else if (error.message?.includes('AnswerLimitReached')) {
+        setError('Submission limit reached for this question.')
       } else {
         setError('Failed to submit answer. Please try again.')
       }
     }
   }
 
-  const getOptionClassName = (index: number) => {
+  const getOptionClassName = (index: number, isCurrent: boolean) => {
     const baseClass = 'quiz-option'
+    if (!isCurrent) return baseClass
     
     if (gameState.showResult || gameState.hasAnswered) {
       if (gameState.selectedAnswer === index) {
@@ -179,6 +380,125 @@ export default function QuizGame({ contract, userAddress, onScoreUpdate }: QuizG
     }
     
     return baseClass
+  }
+
+  const renderQuestionCard = (q: {
+    id: number
+    data: QuestionData
+    state: QuestionState
+    correct: number | null
+    answered: boolean
+  }) => {
+    const isCurrent = q.id === gameState.questionId
+    const isCreator = q.state.creator?.toLowerCase?.() === userAddress.toLowerCase()
+    const revealInput = revealInputs[q.id] || { answer: null }
+    return (
+      <div className={q.state.isActive ? '' : 'question-disabled'}>
+        {q.answered && (
+          <div style={{ marginBottom: 12, display: 'flex', gap: 8, alignItems: 'center' }}>
+            <span className="status-badge status-correct">Answered</span>
+          </div>
+        )}
+
+        <div style={{ marginBottom: 12 }}>
+          <h4 style={{ margin: '12px 0 8px 0' }}>{q.data.questionText}</h4>
+
+        </div>
+
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+          {q.data.options.map((opt, idx) => {
+            const isCorrectOpt = q.state.isRevealed && q.correct === idx
+            const revealSelected =
+              isCreator && !q.state.isRevealed && revealInputs[q.id]?.answer === idx
+            return (
+              <div
+                key={idx}
+                className={`${getOptionClassName(idx, isCurrent)} ${isCorrectOpt ? 'correct' : ''} ${
+                  revealSelected ? 'selected' : ''
+                }`}
+                style={{ cursor: isCurrent && q.state.isActive ? 'pointer' : 'default', opacity: !isCurrent ? 0.85 : 1 }}
+                onClick={() => {
+                  if (!isCurrent || !q.state.isActive) return
+                  if (isCreator && !q.state.isRevealed) {
+                    handleRevealSelect(q.id, idx)
+                    return
+                  }
+                  if (!isCreator) {
+                    handleAnswerSelect(idx)
+                  }
+                }}
+              >
+                <strong>{String.fromCharCode(65 + idx)}.</strong> {opt}
+              </div>
+            )
+          })}
+        </div>
+
+        {!q.state.isRevealed && (
+          <div style={{ marginTop: 10, fontSize: 13, color: '#9ca3af' }}>
+            Awaiting reveal. You can still view the options.
+          </div>
+        )}
+
+        {q.state.isRevealed && (
+          <div style={{ marginTop: 10, fontSize: 13 }}>
+            {q.correct !== null ? (
+              <>
+                <strong>Correct answer:</strong>{' '}
+                <span className="mono">
+                  {String.fromCharCode(65 + q.correct)}. {q.data.options[q.correct]}
+                </span>
+              </>
+            ) : (
+              <span className="text-secondary">Correct answer revealed on-chain but not yet loaded.</span>
+            )}
+          </div>
+        )}
+
+        {isCurrent && isCreator && !q.state.isRevealed && (
+          <div style={{ marginTop: 16, display: 'flex', flexDirection: 'column', gap: 10 }}>
+            <Button
+              variant="primary"
+              onClick={() => handleRevealSubmit(q.id)}
+              disabled={
+                revealingId === q.id ||
+                revealInput.answer === null
+              }
+            >
+              {revealingId === q.id ? 'Revealing...' : 'Reveal Answer'}
+            </Button>
+          </div>
+        )}
+
+        {isCurrent && !isCreator && (
+          <div style={{ marginTop: 16, display: 'flex', gap: 12, flexWrap: 'wrap' }}>
+            <Button
+              variant="primary"
+              onClick={handleAnswerSubmit}
+              disabled={
+                gameState.isSubmitting ||
+                gameState.hasAnswered ||
+                gameState.selectedAnswer === null ||
+                gameState.questionState?.isRevealed
+              }
+              className={gameState.selectedAnswer === null ? 'btn-disabled' : ''}
+            >
+              {gameState.isSubmitting ? 'Submitting...' : 'Submit Answer'}
+            </Button>
+            {!q.state.isRevealed && (
+              <span className="body-2 text-secondary" style={{ alignSelf: 'center' }}>
+                Not revealed yet; submission is stored and will be scored after reveal.
+              </span>
+            )}
+            {q.state.isRevealed && (
+              <span className="body-2 text-secondary" style={{ alignSelf: 'center' }}>
+                Revealed — submissions are closed.
+              </span>
+            )}
+          </div>
+        )}
+      </div>
+    )
   }
 
   if (isLoading) {
@@ -195,7 +515,7 @@ export default function QuizGame({ contract, userAddress, onScoreUpdate }: QuizG
       <div className="card">
         <div style={{ textAlign: 'center', color: '#666' }}>
           <h3>No Quiz Available</h3>
-          <p>There are no active quiz questions at the moment.</p>
+          <p>{error || 'There are no quiz questions at the moment.'}</p>
           <button className="button" onClick={initializeGame}>
             Refresh
           </button>
@@ -204,25 +524,8 @@ export default function QuizGame({ contract, userAddress, onScoreUpdate }: QuizG
     )
   }
 
-  if (!gameState.questionState.isRevealed) {
-    return (
-      <div className="card">
-        <div style={{ textAlign: 'center' }}>
-          <h3>Question Not Yet Revealed</h3>
-          <p style={{ color: '#666', marginBottom: '20px' }}>
-            The quiz administrator has not yet revealed this question. Please wait.
-          </p>
-          <button className="button" onClick={initializeGame}>
-            Check Again
-          </button>
-        </div>
-      </div>
-    )
-  }
-
   return (
     <div>
-      {/* Player Status */}
       <div className="card">
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           <div>
@@ -233,7 +536,15 @@ export default function QuizGame({ contract, userAddress, onScoreUpdate }: QuizG
               Current Score: <strong>{gameState.currentScore} points</strong>
             </p>
           </div>
-          <div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <button
+              className="btn-secondary"
+              onClick={initializeGame}
+              style={{ padding: '8px', width: 40, height: 40, display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}
+              aria-label="Refresh questions"
+            >
+              🔄
+            </button>
             {gameState.hasAnswered ? (
               <span className="status-badge status-correct">Completed</span>
             ) : gameState.showResult ? (
@@ -249,9 +560,6 @@ export default function QuizGame({ contract, userAddress, onScoreUpdate }: QuizG
 
       {/* Question */}
       <div className="card">
-        <h2 style={{ marginBottom: '24px', color: '#333' }}>
-          Question #{gameState.questionId + 1}
-        </h2>
         
         {error && (
           <div className="error" style={{ marginBottom: '20px' }}>
@@ -259,65 +567,56 @@ export default function QuizGame({ contract, userAddress, onScoreUpdate }: QuizG
           </div>
         )}
 
-        <div style={{ marginBottom: '32px' }}>
-          <h3 style={{ fontSize: '20px', lineHeight: '1.5', color: '#333' }}>
-            {gameState.question.questionText}
-          </h3>
-        </div>
-
-        <div style={{ marginBottom: '32px' }}>
-          {gameState.question.options.map((option, index) => (
-            <button
-              key={index}
-              className={getOptionClassName(index)}
-              onClick={() => handleAnswerSelect(index)}
-              disabled={gameState.hasAnswered || gameState.isSubmitting || gameState.showResult}
+        <Accordion
+          items={questionList.map((q) => ({
+            id: q.id,
+            title: (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+            <span className="title-3" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              {q.state.isRevealed && <CheckIcon size={18} className="text-success" />}
+              Question #{q.id + 1}
+            </span>
+            <span
+              className="body-2 text-secondary"
+              style={{ textAlign: 'left', opacity: q.state.isActive ? 1 : 0.6 }}
             >
-              <strong>{String.fromCharCode(65 + index)}.</strong> {option}
-            </button>
-          ))}
-        </div>
-
-        {!gameState.hasAnswered && !gameState.showResult && (
-          <button
-            className="button"
-            onClick={handleAnswerSubmit}
-            disabled={gameState.selectedAnswer === null || gameState.isSubmitting}
-            style={{ width: '100%', padding: '16px', fontSize: '16px' }}
-          >
-            {gameState.isSubmitting ? (
-              <span style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }}>
-                <div className="spinner" style={{ width: '16px', height: '16px' }}></div>
-                Submitting Answer...
-              </span>
-            ) : (
-              'Submit Answer'
-            )}
-          </button>
-        )}
-
-        {(gameState.hasAnswered || gameState.showResult) && (
-          <div style={{ textAlign: 'center', padding: '20px', backgroundColor: '#f8f9fa', borderRadius: '8px' }}>
-            <h4 style={{ margin: '0 0 8px 0', color: '#333' }}>
-              {gameState.hasAnswered ? 'Already Answered' : gameState.isCorrect ? 'Correct!' : 'Incorrect'}
-            </h4>
-            <p style={{ margin: 0, color: '#666' }}>
-              {gameState.hasAnswered 
-                ? 'You have already submitted your answer for this question.'
-                : gameState.isCorrect 
-                  ? 'Great job! You earned 10 points.' 
-                  : 'Better luck next time!'
-              }
-            </p>
+              {q.data.questionText.length > 80
+                ? `${q.data.questionText.slice(0, 80)}...`
+                : q.data.questionText}
+            </span>
           </div>
-        )}
-      </div>
-
-      {/* Refresh Button */}
-      <div style={{ textAlign: 'center', marginTop: '20px' }}>
-        <button className="button button-secondary" onClick={initializeGame}>
-          Refresh Quiz Data
-        </button>
+            ),
+            content: renderQuestionCard(q),
+            disabled: !q.state.isActive,
+          }))}
+          singleOpen
+          defaultOpenId={gameState.questionId}
+          onToggle={(id, isOpen) => {
+            if (!isOpen) return
+            const target = questionList.find((q) => q.id === id)
+            if (!target) return
+            const savedSelection = userSelections[target.id] ?? null
+            const computedIsCorrect =
+              target.state.isRevealed && savedSelection !== null && target.correct !== null
+                ? savedSelection === target.correct
+                : null
+            // Defer state update to avoid setState during Accordion render
+            setTimeout(() => {
+              setGameState((prev) => ({
+                ...prev,
+                questionId: target.id,
+                question: target.data,
+                questionState: target.state,
+                hasAnswered: target.answered,
+                correctAnswerIndex: target.correct,
+                selectedAnswer: savedSelection,
+                isCorrect: computedIsCorrect,
+                showResult: computedIsCorrect !== null,
+                isSubmitting: false,
+              }))
+            }, 0)
+          }}
+        />
       </div>
     </div>
   )
