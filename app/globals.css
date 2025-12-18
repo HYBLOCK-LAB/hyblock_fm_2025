@@ -55,6 +55,7 @@ body {
   color: #ffffff;
   min-height: 100vh;
   position: relative;
+  overflow-x: hidden;
 }
 
 body::before {
@@ -170,7 +171,7 @@ body::before {
 
 .header-logo-wrap {
   position: relative;
-  width: 1000px; /* max out horizontal presence */
+  width: clamp(220px, 55vw, 760px); /* scale down on mid screens to avoid overflow */
   height: 56px; /* keep vertical slim to avoid black area */
   display: block;
   filter: drop-shadow(0 0 8px rgba(0, 102, 255, 0.2));
@@ -814,6 +815,21 @@ body::before {
     gap: 24px;
   }
   
+  .header-content {
+    padding: 10px 16px;
+    gap: 12px;
+  }
+  
+  .header-actions {
+    flex-wrap: wrap;
+    gap: 10px;
+    justify-content: flex-end;
+  }
+  
+  .header-logo-wrap {
+    height: 48px;
+  }
+  
   .hero-section {
     padding: 100px 0 60px;
   }
@@ -822,6 +838,11 @@ body::before {
 @media (max-width: 768px) {
   .container { 
     padding: 0 16px; 
+  }
+  
+  .header-logo-wrap {
+    width: 320px;
+    height: 40px;
   }
   
   .hero-section { 
@@ -845,18 +866,6 @@ body::before {
     padding: 24px;
   }
   
-  .header-content { 
-    padding: 12px 16px; 
-  }
-  
-  .header-actions { 
-    gap: 8px; 
-  }
-  
-  .header-title {
-    font-size: 20px;
-  }
-  
   .btn-large {
     padding: 16px 32px;
     font-size: 16px;
@@ -869,6 +878,97 @@ body::before {
   
   .welcome-title {
     font-size: 28px;
+  }
+}
+
+/* Extra-small devices */
+@media (max-width: 640px) {
+  .header-content {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 12px;
+    padding: 12px 14px;
+  }
+  
+  .header-actions {
+    width: 100%;
+    justify-content: flex-start;
+    flex-wrap: wrap;
+    gap: 10px;
+  }
+  
+  .score-display,
+  .wallet-trigger {
+    width: 100%;
+    justify-content: space-between;
+  }
+  
+  .wallet-dropdown {
+    width: 100%;
+    min-width: unset;
+  }
+  
+  .hero-section {
+    padding: 64px 0 32px;
+  }
+  
+  .hero-title {
+    font-size: clamp(32px, 9vw, 40px);
+  }
+  
+  .hero-subtitle {
+    font-size: 18px;
+    line-height: 1.45;
+  }
+  
+  .hero-description {
+    font-size: 15px;
+    line-height: 1.6;
+  }
+  
+  .hero-actions {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  
+  .hero-actions .btn-primary,
+  .hero-actions .btn-secondary {
+    width: 100%;
+    justify-content: center;
+  }
+  
+  .features-section {
+    padding: 60px 0;
+  }
+  
+  .feature-card {
+    padding: 20px;
+  }
+  
+  .registration-card,
+  .welcome-card {
+    padding: 28px 22px;
+    margin: 24px 0;
+  }
+}
+
+@media (max-width: 420px) {
+  .container { 
+    padding: 0 12px; 
+  }
+  
+  .header-logo-wrap {
+    width: 220px;
+    height: 32px;
+  }
+  
+  .hero-badge {
+    padding: 6px 12px;
+  }
+  
+  .hero-section::before {
+    width: 140%;
+    height: 140%;
   }
 }
 
