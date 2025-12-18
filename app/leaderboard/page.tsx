@@ -17,7 +17,7 @@ export default function LeaderboardPage() {
       setEntries(data)
     } catch (err: any) {
       console.error('Failed to load leaderboard', err)
-      setError(err?.message || '리더보드를 불러오지 못했습니다.')
+      setError(err?.message || 'Cannot load leaderboard data.')
     } finally {
       setIsLoading(false)
     }

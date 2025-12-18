@@ -80,6 +80,24 @@ export default function Home() {
     }
   }
 
+  // Auto-connect if MetaMask is already authorized (helps preserve state across routes)
+  useEffect(() => {
+    const reconnect = async () => {
+      if (typeof window === 'undefined' || !(window as any).ethereum) return
+      try {
+        const accounts: string[] = await (window as any).ethereum.request({ method: 'eth_accounts' })
+        if (accounts && accounts.length > 0) {
+          const newProvider = new ethers.BrowserProvider((window as any).ethereum)
+          const newSigner = await newProvider.getSigner()
+          await handleWalletConnected(newProvider, newSigner, accounts[0])
+        }
+      } catch (error) {
+        console.error('Auto-connect failed:', error)
+      }
+    }
+    reconnect()
+  }, [])
+
   const connectWallet = async () => {
     if (typeof window !== 'undefined' && window.ethereum) {
       try {
@@ -95,6 +113,31 @@ export default function Home() {
       alert('Please install MetaMask!');
     }
   };
+
+  // Sync when accounts change in MetaMask
+  useEffect(() => {
+    const eth = (typeof window !== 'undefined' && (window as any).ethereum) || null
+    if (!eth) return
+
+    const handleAccountsChanged = async (accounts: string[]) => {
+      if (!accounts || accounts.length === 0) {
+        handleDisconnect()
+        return
+      }
+      try {
+        const newProvider = new ethers.BrowserProvider(eth)
+        const newSigner = await newProvider.getSigner()
+        await handleWalletConnected(newProvider, newSigner, accounts[0])
+      } catch (err) {
+        console.error('Failed to handle accountsChanged:', err)
+      }
+    }
+
+    eth.on('accountsChanged', handleAccountsChanged)
+    return () => {
+      eth.removeListener('accountsChanged', handleAccountsChanged)
+    }
+  }, [])
 
   // Determine owner privilege
   useEffect(() => {
