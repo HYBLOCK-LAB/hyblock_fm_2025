@@ -17,20 +17,20 @@
     "local-deploy": "hardhat run scripts/deploy.js --network localhost"
   },
   "dependencies": {
-    "next": "14.0.4",
+    "ethers": "^6.8.1",
+    "next": "^14.2.35",
     "react": "^18",
-    "react-dom": "^18",
-    "ethers": "^6.8.1"
+    "react-dom": "^18"
   },
   "devDependencies": {
+    "@nomicfoundation/hardhat-toolbox": "^4.0.0",
     "@types/node": "^20",
     "@types/react": "^18",
     "@types/react-dom": "^18",
+    "dotenv": "^16.3.1",
     "eslint": "^8",
     "eslint-config-next": "14.0.4",
-    "typescript": "^5",
-    "@nomicfoundation/hardhat-toolbox": "^4.0.0",
     "hardhat": "^2.19.2",
-    "dotenv": "^16.3.1"
+    "typescript": "^5"
   }
 }
