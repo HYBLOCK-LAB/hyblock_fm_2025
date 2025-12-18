@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import Image from 'next/image';
+import Link from 'next/link';
 import Button from './ui/Button';
 import Card from './ui/Card';
 import { TrophyIcon, WalletIcon } from './icons';
@@ -31,14 +32,18 @@ export default function Header({ isConnected, account, score, onConnect, onDisco
               priority
             />
           </div>
-        </div>
-        
-        <div className="header-actions">
-          {isConnected && (
-            <div className="score-display">
-              <TrophyIcon size={18} className="score-icon" />
-              <div>
-                <div className="overline text-tertiary">Score</div>
+      </div>
+      
+      <div className="header-actions">
+        <Link href="/leaderboard" className="btn-secondary" style={{ textDecoration: 'none' }}>
+          Leaderboard
+        </Link>
+
+        {isConnected && (
+          <div className="score-display">
+            <TrophyIcon size={18} className="score-icon" />
+            <div>
+              <div className="overline text-tertiary">Score</div>
                 <div className="title-3">{score}</div>
               </div>
             </div>

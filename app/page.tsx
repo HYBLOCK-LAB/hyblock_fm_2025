@@ -7,6 +7,7 @@ import Registration from './components/Registration'
 import QuizGame from './components/QuizGame'
 import ContractError from './components/ContractError'
 import Header from './components/Header'
+import AdminQuestionForm from './components/AdminQuestionForm'
 import Card from './components/ui/Card'
 import Button from './components/ui/Button'
 import FeatureCard from './components/ui/FeatureCard'
@@ -23,6 +24,7 @@ export default function Home() {
   const [contractError, setContractError] = useState<boolean>(false)
   const [playerName, setPlayerName] = useState<string>('')
   const [score, setScore] = useState<number>(0)
+  const [isOwner, setIsOwner] = useState<boolean>(false)
 
   const checkRegistration = async (address: string, gameContract: QuizGameContract) => {
     try {
@@ -68,6 +70,7 @@ export default function Home() {
     setUserAddress('')
     setIsRegistered(false)
     setContractError(false)
+    setIsOwner(false)
   }
 
   const handleRetry = async () => {
@@ -93,6 +96,24 @@ export default function Home() {
     }
   };
 
+  // Determine owner privilege
+  useEffect(() => {
+    const checkOwner = async () => {
+      if (!contract || !userAddress) {
+        setIsOwner(false)
+        return
+      }
+      try {
+        const owner = await contract.getOwner()
+        setIsOwner(owner.toLowerCase() === userAddress.toLowerCase())
+      } catch (err) {
+        console.error('Failed to fetch owner address:', err)
+        setIsOwner(false)
+      }
+    }
+    checkOwner()
+  }, [contract, userAddress])
+
   return (
     <div className="page-container">
       {/* Header */}
@@ -106,6 +127,11 @@ export default function Home() {
 
       <main className="main-content">
         <div className="container">
+          {/* Admin: create questions */}
+          {contract && isOwner && !contractError && (
+            <AdminQuestionForm contract={contract} />
+          )}
+
           {/* Welcome Message */}
           {userAddress && playerName && (
             <div className="welcome-section">

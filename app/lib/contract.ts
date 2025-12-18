@@ -1,12 +1,17 @@
 import { ethers } from 'ethers'
 
 // Contract ABI - essential functions only
-const QUIZ_GAME_ABI = [
+export const QUIZ_GAME_ABI = [
   // Events
   "event PlayerRegistered(address indexed player, string name)",
   "event AnswerSubmitted(address indexed player, uint256 indexed questionId, bool isCorrect)",
   "event ScoreUpdated(address indexed player, uint256 newScore)",
   "event AnswerRevealed(uint256 indexed questionId, uint8 correctAnswer, bytes32 salt)",
+  
+  // Admin functions
+  "function owner() public view returns (address)",
+  "function addQuestion(string memory _questionText, string[4] memory _options, bytes32 _answerHash) public",
+  "function revealAnswer(uint256 _questionId, uint8 _correctAnswer, bytes32 _salt) public",
   
   // Registration functions
   "function register(string memory _name) public",
@@ -41,9 +46,9 @@ export interface QuestionState {
 
 export class QuizGameContract {
   private contract: ethers.Contract
-  private signer: ethers.Signer
+  private signerOrProvider: ethers.Signer | ethers.Provider
 
-  constructor(signer: ethers.Signer) {
+  constructor(signerOrProvider: ethers.Signer | ethers.Provider) {
     const contractAddress = process.env.NEXT_PUBLIC_CONTRACT_ADDRESS
     if (!contractAddress || contractAddress.trim() === '') {
       console.error('Contract address not configured')
@@ -54,8 +59,8 @@ export class QuizGameContract {
       throw new Error('Contract address not found. Please set NEXT_PUBLIC_CONTRACT_ADDRESS in .env.local and restart the server.')
     }
     
-    this.signer = signer
-    this.contract = new ethers.Contract(contractAddress, QUIZ_GAME_ABI, signer)
+    this.signerOrProvider = signerOrProvider
+    this.contract = new ethers.Contract(contractAddress, QUIZ_GAME_ABI, signerOrProvider)
   }
 
   // Registration methods
@@ -108,6 +113,27 @@ export class QuizGameContract {
     return await this.contract.questionCount()
   }
 
+  // Admin methods
+  async getOwner(): Promise<string> {
+    return await this.contract.owner()
+  }
+
+  async addQuestion(
+    questionText: string,
+    options: [string, string, string, string],
+    answerHash: string
+  ): Promise<ethers.ContractTransactionResponse> {
+    return await this.contract.addQuestion(questionText, options, answerHash)
+  }
+
+  async revealAnswer(
+    questionId: number,
+    correctAnswer: number,
+    salt: string
+  ): Promise<ethers.ContractTransactionResponse> {
+    return await this.contract.revealAnswer(questionId, correctAnswer, salt)
+  }
+
   // Event listeners
   onPlayerRegistered(callback: (player: string, name: string) => void) {
     this.contract.on('PlayerRegistered', callback)
@@ -134,4 +160,13 @@ export class QuizGameContract {
   getAddress(): string {
     return this.contract.target as string
   }
+}
+
+// Read-only contract factory (no signer required)
+export const getReadOnlyQuizContract = (provider: ethers.Provider) => {
+  return new ethers.Contract(
+    process.env.NEXT_PUBLIC_CONTRACT_ADDRESS as string,
+    QUIZ_GAME_ABI,
+    provider
+  )
 }
