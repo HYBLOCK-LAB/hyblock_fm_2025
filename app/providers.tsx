@@ -7,8 +7,12 @@ import { type ReactNode, useMemo } from 'react'
 import { WagmiProvider, http } from 'wagmi'
 import { sepolia } from 'wagmi/chains'
 
-const walletConnectProjectId =
-  process.env.NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID || 'demo'
+const walletConnectProjectId = process.env.NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID
+if (!walletConnectProjectId) {
+  throw new Error(
+    'NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID is required for WalletConnect (RainbowKit). Create a project at cloud.walletconnect.com and set it in .env.local.'
+  )
+}
 
 const wagmiConfig = getDefaultConfig({
   appName: 'HyBlock Quiz DApp',

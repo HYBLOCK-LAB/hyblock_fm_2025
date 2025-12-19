@@ -14,6 +14,10 @@ interface WalletConnectionProps {
 export default function WalletConnection({ onWalletConnected }: WalletConnectionProps) {
   const [isConnecting, setIsConnecting] = useState(false)
   const [error, setError] = useState<string>('')
+  const sepoliaRpcUrl =
+    process.env.NEXT_PUBLIC_SEPOLIA_RPC_URL ||
+    process.env.NEXT_PUBLIC_RPC_URL ||
+    'https://rpc.sepolia.org'
 
   const addSepoliaNetwork = async () => {
     try {
@@ -27,7 +31,7 @@ export default function WalletConnection({ onWalletConnected }: WalletConnection
             symbol: 'ETH',
             decimals: 18
           },
-          rpcUrls: ['https://sepolia.infura.io/v3/'],
+          rpcUrls: [sepoliaRpcUrl],
           blockExplorerUrls: ['https://sepolia.etherscan.io/']
         }]
       })
