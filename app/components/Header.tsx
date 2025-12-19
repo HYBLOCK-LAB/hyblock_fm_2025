@@ -58,13 +58,14 @@ export default function Header({ isConnected, account, score, onConnect, onDisco
           )}
 
           {isConnected && (
-            <div className="score-display">
-              <TrophyIcon size={18} className="score-icon" />
-              <div>
-                <div className="overline text-tertiary">Score</div>
-                <div className="title-3">{score}</div>
+            <Link href="/score" style={{ textDecoration: 'none' }}>
+              <div className="score-display" style={{ cursor: 'pointer', color: '#ffffff' }}>
+                <TrophyIcon size={18} className="score-icon" />
+                <div>
+                  <div className="title-3">{score}</div>
+                </div>
               </div>
-            </div>
+            </Link>
           )}
           
           {isConnected ? (

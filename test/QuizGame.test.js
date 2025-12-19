@@ -89,11 +89,9 @@ describe("QuizGame", function () {
     let salt;
 
     beforeEach(async function () {
-      // Register players
       await quizGame.connect(player1).register("Alice");
       await quizGame.connect(player2).register("Bob");
 
-      // Add and reveal question
       salt = ethers.randomBytes(32);
       const answerHash = ethers.keccak256(
         ethers.AbiCoder.defaultAbiCoder().encode(["uint8", "bytes32"], [correctAnswer, salt])
@@ -104,27 +102,23 @@ describe("QuizGame", function () {
         ["Option A", "Option B", "Option C", "Option D"],
         answerHash
       );
-
-      await quizGame.revealAnswer(0, correctAnswer, salt);
     });
 
-    it("Should allow registered player to submit correct answer", async function () {
+    it("Should emit selected answer index on submit (correct answer)", async function () {
       await expect(quizGame.connect(player1).submitAnswer(0, correctAnswer))
         .to.emit(quizGame, "AnswerSubmitted")
-        .withArgs(player1.address, 0, true)
-        .and.to.emit(quizGame, "ScoreUpdated")
-        .withArgs(player1.address, 10);
+        .withArgs(player1.address, 0, correctAnswer);
 
-      expect(await quizGame.getPlayerScore(player1.address)).to.equal(10);
+      expect(await quizGame.hasPlayerAnswered(0, player1.address)).to.equal(true);
     });
 
-    it("Should allow registered player to submit wrong answer", async function () {
+    it("Should emit selected answer index on submit (wrong answer)", async function () {
       const wrongAnswer = 3;
       await expect(quizGame.connect(player1).submitAnswer(0, wrongAnswer))
         .to.emit(quizGame, "AnswerSubmitted")
-        .withArgs(player1.address, 0, false);
+        .withArgs(player1.address, 0, wrongAnswer);
 
-      expect(await quizGame.getPlayerScore(player1.address)).to.equal(0);
+      expect(await quizGame.hasPlayerAnswered(0, player1.address)).to.equal(true);
     });
 
     it("Should reject duplicate submission", async function () {

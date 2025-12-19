@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react'
 import { ethers } from 'ethers'
 import { QuizGameContract, QuestionData, QuestionState, QUIZ_GAME_ABI } from '../lib/contract'
 import Accordion from './ui/Accordion'
-import { CheckIcon } from './icons'
+import { AnsweredIcon, CheckIcon, RefreshIcon } from './icons'
 import Button from './ui/Button'
 
 interface QuizGameProps {
@@ -60,10 +60,16 @@ const [revealInputs, setRevealInputs] = useState<Record<number, { answer: number
 
   // Set up event listeners
   useEffect(() => {
-    const handleAnswerSubmitted = (player: string, questionId: bigint) => {
+    const handleAnswerSubmitted = (player: string, questionId: bigint, answer: number | bigint) => {
       if (player.toLowerCase() === userAddress.toLowerCase()) {
         console.log('Answer submitted event:', player, questionId)
         const qId = Number(questionId)
+        const answerNum =
+          typeof answer === 'number'
+            ? answer
+            : typeof answer === 'bigint'
+              ? Number(answer)
+              : null
         setQuestionList((prev) =>
           prev.map((q) =>
             q.id === qId
@@ -71,6 +77,9 @@ const [revealInputs, setRevealInputs] = useState<Record<number, { answer: number
               : q
           )
         )
+        if (answerNum !== null && !Number.isNaN(answerNum)) {
+          persistSelection(qId, answerNum)
+        }
         setGameState(prev => ({
           ...prev,
           isSubmitting: false,
@@ -258,7 +267,26 @@ const [revealInputs, setRevealInputs] = useState<Record<number, { answer: number
 
       const scoreNumber = Number(score);
       onScoreUpdate?.(scoreNumber);
-      
+
+      const loadStoredSelections = (): Record<number, number | null> => {
+        if (typeof window === 'undefined' || !userAddress) return {}
+        try {
+          const raw = localStorage.getItem(`quiz-selections-${userAddress}`)
+          if (!raw) return {}
+          const parsed = JSON.parse(raw)
+          return parsed && typeof parsed === 'object' ? parsed : {}
+        } catch {
+          return {}
+        }
+      }
+
+      const storedSelections = loadStoredSelections()
+      const latestSelection = storedSelections[latest.id] ?? null
+      const computedIsCorrect =
+        latest.state.isRevealed && latest.correct !== null && latestSelection !== null
+          ? latestSelection === latest.correct
+          : null
+
       setGameState(prev => ({
         ...prev,
         playerName: name,
@@ -267,8 +295,12 @@ const [revealInputs, setRevealInputs] = useState<Record<number, { answer: number
         question: latest.data,
         questionState: latest.state,
         hasAnswered: latest.answered,
-        correctAnswerIndex: latest.correct
+        correctAnswerIndex: latest.correct,
+        selectedAnswer: latestSelection,
+        isCorrect: computedIsCorrect,
+        showResult: computedIsCorrect !== null
       }))
+      setUserSelections(storedSelections)
       setQuestionList(listToUse)
     } catch (error: any) {
       console.error('Error initializing game:', error)
@@ -278,6 +310,20 @@ const [revealInputs, setRevealInputs] = useState<Record<number, { answer: number
     }
   }
 
+  const persistSelection = (questionId: number, answerIndex: number) => {
+    setUserSelections((prev) => {
+      const updated = { ...prev, [questionId]: answerIndex }
+      if (typeof window !== 'undefined' && userAddress) {
+        try {
+          localStorage.setItem(`quiz-selections-${userAddress}`, JSON.stringify(updated))
+        } catch {
+          // ignore storage failures
+        }
+      }
+      return updated
+    })
+  }
+
   const handleAnswerSelect = (answerIndex: number) => {
     if (gameState.hasAnswered || gameState.isSubmitting || gameState.showResult) return
 
@@ -285,7 +331,7 @@ const [revealInputs, setRevealInputs] = useState<Record<number, { answer: number
       ...prev,
       selectedAnswer: answerIndex
     }))
-    setUserSelections((prev) => ({ ...prev, [gameState.questionId]: answerIndex }))
+    persistSelection(gameState.questionId, answerIndex)
   }
 
   const handleRevealSelect = (questionId: number, answerIndex: number) => {
@@ -296,11 +342,11 @@ const [revealInputs, setRevealInputs] = useState<Record<number, { answer: number
   }
 
   const handleRevealSubmit = async (questionId: number) => {
-    if (!contract) return
+    if (!contract || revealingId !== null) return
     const entry = revealInputs[questionId] || { answer: null }
     const answerNum = entry.answer
     if (answerNum === null || answerNum < 0 || answerNum > 3) {
-      setError('Correct answer must be 0-3 before revealing.')
+      setError('정답은 Option 1~4 중 하나를 선택한 뒤 공개하세요.')
       return
     }
 
@@ -367,15 +413,31 @@ const [revealInputs, setRevealInputs] = useState<Record<number, { answer: number
     }
   }
 
+  const hasValidSelection = (questionId: number, options: string[]) => {
+    const selection = userSelections[questionId]
+    return (
+      selection !== null &&
+      selection !== undefined &&
+      Number.isInteger(selection) &&
+      selection >= 0 &&
+      selection < options.length
+    )
+  }
+
+  const formatSelectionLabel = (selection: number, options: string[]) =>
+    `${String.fromCharCode(65 + selection)}. ${options[selection]}`
+
   const getOptionClassName = (index: number, isCurrent: boolean) => {
     const baseClass = 'quiz-option'
     if (!isCurrent) return baseClass
     
-    if (gameState.showResult || gameState.hasAnswered) {
-      if (gameState.selectedAnswer === index) {
-        return `${baseClass} ${gameState.isCorrect ? 'correct' : 'incorrect'}`
-      }
-    } else if (gameState.selectedAnswer === index) {
+    const hasResult = gameState.showResult && gameState.isCorrect !== null
+
+    if (hasResult && gameState.selectedAnswer === index) {
+      return `${baseClass} ${gameState.isCorrect ? 'correct' : 'incorrect'}`
+    }
+
+    if (gameState.selectedAnswer === index) {
       return `${baseClass} selected`
     }
     
@@ -392,14 +454,11 @@ const [revealInputs, setRevealInputs] = useState<Record<number, { answer: number
     const isCurrent = q.id === gameState.questionId
     const isCreator = q.state.creator?.toLowerCase?.() === userAddress.toLowerCase()
     const revealInput = revealInputs[q.id] || { answer: null }
+    const userSelection = userSelections[q.id]
+    const hasUserSelection = hasValidSelection(q.id, q.data.options)
+
     return (
       <div className={q.state.isActive ? '' : 'question-disabled'}>
-        {q.answered && (
-          <div style={{ marginBottom: 12, display: 'flex', gap: 8, alignItems: 'center' }}>
-            <span className="status-badge status-correct">Answered</span>
-          </div>
-        )}
-
         <div style={{ marginBottom: 12 }}>
           <h4 style={{ margin: '12px 0 8px 0' }}>{q.data.questionText}</h4>
 
@@ -461,7 +520,7 @@ const [revealInputs, setRevealInputs] = useState<Record<number, { answer: number
               variant="primary"
               onClick={() => handleRevealSubmit(q.id)}
               disabled={
-                revealingId === q.id ||
+                revealingId !== null ||
                 revealInput.answer === null
               }
             >
@@ -543,7 +602,7 @@ const [revealInputs, setRevealInputs] = useState<Record<number, { answer: number
               style={{ padding: '8px', width: 40, height: 40, display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}
               aria-label="Refresh questions"
             >
-              🔄
+              <RefreshIcon size={18} />
             </button>
             {gameState.hasAnswered ? (
               <span className="status-badge status-correct">Completed</span>
@@ -568,27 +627,45 @@ const [revealInputs, setRevealInputs] = useState<Record<number, { answer: number
         )}
 
         <Accordion
-          items={questionList.map((q) => ({
-            id: q.id,
-            title: (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-            <span className="title-3" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-              {q.state.isRevealed && <CheckIcon size={18} className="text-success" />}
-              Question #{q.id + 1}
-            </span>
-            <span
-              className="body-2 text-secondary"
-              style={{ textAlign: 'left', opacity: q.state.isActive ? 1 : 0.6 }}
-            >
-              {q.data.questionText.length > 80
-                ? `${q.data.questionText.slice(0, 80)}...`
-                : q.data.questionText}
-            </span>
-          </div>
-            ),
-            content: renderQuestionCard(q),
-            disabled: !q.state.isActive,
-          }))}
+          items={questionList.map((q) => {
+            const selection = userSelections[q.id]
+            const selectionValid = hasValidSelection(q.id, q.data.options)
+
+            return {
+              id: q.id,
+              title: (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+                <span className="title-3">Question #{q.id + 1}</span>
+                {q.state.isRevealed && (
+                  <span className="revealed-chip">
+                    <CheckIcon size={14} />
+                    <span>Revealed</span>
+                  </span>
+                )}
+                {q.answered && (
+                  <span className="answered-chip" style={{ display: 'inline-flex' }}>
+                    <AnsweredIcon size={14} />
+                    <span>
+                      Answered
+                    </span>
+                  </span>
+                )}
+              </div>
+              <span
+                className="body-2 text-secondary"
+                style={{ textAlign: 'left', opacity: q.state.isActive ? 1 : 0.6 }}
+              >
+                {q.data.questionText.length > 80
+                  ? `${q.data.questionText.slice(0, 80)}...`
+                  : q.data.questionText}
+              </span>
+            </div>
+              ),
+              content: renderQuestionCard(q),
+              disabled: !q.state.isActive,
+            }
+          })}
           singleOpen
           defaultOpenId={gameState.questionId}
           onToggle={(id, isOpen) => {

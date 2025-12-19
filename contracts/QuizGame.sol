@@ -20,7 +20,12 @@ contract QuizGame {
     error CreatorCannotAnswer();
     error AnswerLimitReached();
 
-    uint256 private constant SCORE_REWARD = 10;
+    // Player rewards (encourage participation: small gap between correct/incorrect)
+    uint256 private constant SCORE_REWARD_CORRECT = 7;
+    uint256 private constant SCORE_REWARD_WRONG = 3;
+    uint256 private constant CREATOR_REWARD_BEST = 10; // target band reward
+    uint256 private constant CREATOR_REWARD_HIGH = 6; // correct > wrong (outside band) — below player correct reward
+    uint256 private constant CREATOR_REWARD_LOW = 4; // wrong > correct
     uint8 private constant UNSET_ANSWER = type(uint8).max;
 
     // Question (commit-reveal: answerHash committed, revealed later)
@@ -54,7 +59,11 @@ contract QuizGame {
         string questionText,
         address indexed creator
     );
-    event AnswerSubmitted(address indexed player, uint256 indexed questionId);
+    event AnswerSubmitted(
+        address indexed player,
+        uint256 indexed questionId,
+        uint8 answer
+    );
     event ScoreUpdated(address indexed player, uint256 newScore);
     event QuestionStatusChanged(uint256 indexed questionId, bool isActive);
     event NameChanged(address indexed player, string newName);
@@ -150,19 +159,50 @@ contract QuizGame {
         q.correctAnswer = _correctAnswer;
         q.isRevealed = true;
 
-        playerScores[msg.sender] += SCORE_REWARD;
-        emit ScoreUpdated(msg.sender, playerScores[msg.sender]);
-
         // Bounded scoring loop (max 20 submissions per question)
         address[] storage participants = answerParticipants[_questionId];
         uint256 len = participants.length;
+        uint256 correctCount = 0;
+        uint256 wrongCount = 0;
+
         for (uint256 i = 0; i < len; i++) {
             address player = participants[i];
             uint8 submitted = playerAnswers[_questionId][player];
             if (submitted == _correctAnswer) {
-                playerScores[player] += SCORE_REWARD;
-                emit ScoreUpdated(player, playerScores[player]);
+                playerScores[player] += SCORE_REWARD_CORRECT;
+                unchecked {
+                    correctCount++;
+                }
+            } else {
+                playerScores[player] += SCORE_REWARD_WRONG;
+                unchecked {
+                    wrongCount++;
+                }
             }
+            emit ScoreUpdated(player, playerScores[player]);
+        }
+
+        if (len > 0) {
+            uint256 total = correctCount + wrongCount;
+            uint256 creatorReward;
+
+            // Correct answer ratio in percent (integer math)
+            uint256 correctPct = (correctCount * 100) / total;
+            bool inTargetBand = correctPct >= 40 && correctPct <= 70;
+
+            if (inTargetBand) {
+                creatorReward = CREATOR_REWARD_BEST;
+            } else if (correctCount > wrongCount) {
+                creatorReward = CREATOR_REWARD_HIGH;
+            } else if (wrongCount > correctCount) {
+                creatorReward = CREATOR_REWARD_LOW;
+            } else {
+                // Tie outside band (unlikely with band covering 40-70%) defaults to best
+                creatorReward = CREATOR_REWARD_BEST;
+            }
+
+            playerScores[msg.sender] += creatorReward;
+            emit ScoreUpdated(msg.sender, playerScores[msg.sender]);
         }
 
         emit AnswerRevealed(_questionId, _correctAnswer, _salt);
@@ -185,7 +225,7 @@ contract QuizGame {
         playerAnswers[_questionId][msg.sender] = _answer;
         answerParticipants[_questionId].push(msg.sender);
 
-        emit AnswerSubmitted(msg.sender, _questionId);
+        emit AnswerSubmitted(msg.sender, _questionId, _answer);
     }
 
     // 문제 조회 함수 (정답 제외)

@@ -91,4 +91,24 @@ export function CheckIcon({ size, className, strokeWidth = 1.6 }: IconProps) {
   )
 }
 
+export function AnsweredIcon({ size, className, strokeWidth = 1.6 }: IconProps) {
+  return (
+    <svg {...svgProps(size, className)} stroke="currentColor">
+      <circle cx="12" cy="12" r="8" strokeWidth={strokeWidth} />
+      <path d="M9 12l2 2 4-4" strokeWidth={strokeWidth} />
+    </svg>
+  )
+}
+
+export function RefreshIcon({ size, className, strokeWidth = 1.6 }: IconProps) {
+  return (
+    <svg {...svgProps(size, className)} stroke="currentColor">
+      <path d="M3 12a9 9 0 0 1 14.6-6.6L20 8" strokeWidth={strokeWidth} />
+      <path d="M21 12a9 9 0 0 1-14.6 6.6L4 16" strokeWidth={strokeWidth} />
+      <path d="M20 8v-4h-4" strokeWidth={strokeWidth} />
+      <path d="M4 16v4h4" strokeWidth={strokeWidth} />
+    </svg>
+  )
+}
+
 export type { IconProps }

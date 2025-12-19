@@ -52,7 +52,7 @@ export default function CreateQuestionForm({ contract, account }: CreateQuestion
     }
 
     if (correctAnswer < 0 || correctAnswer > 3) {
-      setError('Correct answer must be between 0 and 3.')
+      setError('정답은 Option 1~4 중에서 선택해주세요.')
       return
     }
 
@@ -130,16 +130,18 @@ export default function CreateQuestionForm({ contract, account }: CreateQuestion
         </div>
 
         <label className="body-2" style={{ maxWidth: 260 }}>
-          Correct answer (index 0-3)
-          <input
-            type="number"
-            min={0}
-            max={3}
+          Correct answer
+          <select
             value={correctAnswer}
             onChange={(e) => setCorrectAnswer(Number(e.target.value))}
             style={{ width: '100%', marginTop: 6, padding: 10 }}
-            required
-          />
+          >
+            {[0,1,2,3].map((idx) => (
+              <option key={idx} value={idx}>
+                Option {idx + 1}
+              </option>
+            ))}
+          </select>
         </label>
 
         {error && (

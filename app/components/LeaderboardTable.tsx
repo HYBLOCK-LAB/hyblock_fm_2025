@@ -1,8 +1,10 @@
 'use client'
 
+import { useState } from 'react'
 import Card from './ui/Card'
-import { TrophyIcon } from './icons'
+import { InfoIcon, TrophyIcon } from './icons'
 import { LeaderboardEntry } from '../lib/leaderboard'
+import ScoreRulesModal from './ScoreRulesModal'
 
 interface LeaderboardTableProps {
   entries: LeaderboardEntry[]
@@ -14,6 +16,8 @@ interface LeaderboardTableProps {
 const medalColors = ['#facc15', '#e5e7eb', '#f97316'] // gold, silver, bronze
 
 export default function LeaderboardTable({ entries, isLoading, error, onRefresh }: LeaderboardTableProps) {
+  const [showTooltip, setShowTooltip] = useState(false)
+
   return (
     <Card className="registration-card" style={{ maxWidth: 900, margin: '24px auto' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12 }}>
@@ -24,9 +28,15 @@ export default function LeaderboardTable({ entries, isLoading, error, onRefresh 
             Reads contract data without login. Network latency may apply.
           </p>
         </div>
-        <button className="btn-secondary" onClick={onRefresh} disabled={isLoading} style={{ whiteSpace: 'nowrap' }}>
-          {isLoading ? 'Refreshing...' : 'Refresh'}
-        </button>
+        <div style={{ display: 'flex', gap: 8 }}>
+          <button className="btn-secondary" onClick={() => setShowTooltip(true)} style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+            <InfoIcon size={16} />
+            Score rules
+          </button>
+          <button className="btn-secondary" onClick={onRefresh} disabled={isLoading} style={{ whiteSpace: 'nowrap' }}>
+            {isLoading ? 'Refreshing...' : 'Refresh'}
+          </button>
+        </div>
       </div>
 
       {error && (
@@ -100,6 +110,8 @@ export default function LeaderboardTable({ entries, isLoading, error, onRefresh 
           )}
         </div>
       </div>
+
+      <ScoreRulesModal open={showTooltip} onClose={() => setShowTooltip(false)} />
     </Card>
   )
 }

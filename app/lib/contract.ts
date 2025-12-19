@@ -5,7 +5,7 @@ export const QUIZ_GAME_ABI = [
   // Events
   "event PlayerRegistered(address indexed player, string name)",
   "event NameChanged(address indexed player, string newName)",
-  "event AnswerSubmitted(address indexed player, uint256 indexed questionId)",
+  "event AnswerSubmitted(address indexed player, uint256 indexed questionId, uint8 answer)",
   "event AnswerEvaluated(address indexed player, uint256 indexed questionId, bool isCorrect)",
   "event ScoreUpdated(address indexed player, uint256 newScore)",
   "event AnswerRevealed(uint256 indexed questionId, uint8 correctAnswer, bytes32 salt)",
@@ -142,7 +142,7 @@ export class QuizGameContract {
     this.contract.on('PlayerRegistered', callback)
   }
 
-  onAnswerSubmitted(callback: (player: string, questionId: bigint, isCorrect: boolean) => void) {
+  onAnswerSubmitted(callback: (player: string, questionId: bigint, answer: number) => void) {
     this.contract.on('AnswerSubmitted', callback)
   }
 
