@@ -101,7 +101,6 @@ export default function CreateQuestionPage() {
       <Header
         isConnected={!!account}
         account={account}
-        score={0}
         onConnect={connectWallet}
         onDisconnect={disconnect}
       />
