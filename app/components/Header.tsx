@@ -1,32 +1,27 @@
-'use client';
+'use client'
 
-import { useEffect, useState } from 'react';
-import Image from 'next/image';
-import Link from 'next/link';
-import Button from './ui/Button';
-import { TrophyIcon, WalletIcon } from './icons';
-import { getStoredScore } from '../lib/scoreStore';
+import { useEffect, useState } from 'react'
+import Image from 'next/image'
+import Link from 'next/link'
+import { ConnectButton } from '@rainbow-me/rainbowkit'
+import { useAccount } from 'wagmi'
+import Button from './ui/Button'
+import { TrophyIcon, WalletIcon } from './icons'
+import { getStoredScore } from '../lib/scoreStore'
 
-interface HeaderProps {
-  isConnected: boolean;
-  account: string | null;
-  onConnect: () => void;
-  onDisconnect: () => void;
-}
-
-export default function Header({ isConnected, account, onConnect, onDisconnect }: HeaderProps) {
-  const [open, setOpen] = useState(false);
-  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
-  const [displayScore, setDisplayScore] = useState<number>(getStoredScore());
+export default function Header() {
+  const { address, isConnected } = useAccount()
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
+  const [displayScore, setDisplayScore] = useState<number>(getStoredScore())
 
   useEffect(() => {
-    const sync = () => setDisplayScore(getStoredScore());
-    sync();
+    const sync = () => setDisplayScore(getStoredScore())
+    sync()
     if (typeof window !== 'undefined') {
-      window.addEventListener('focus', sync);
-      return () => window.removeEventListener('focus', sync);
+      window.addEventListener('focus', sync)
+      return () => window.removeEventListener('focus', sync)
     }
-  }, []);
+  }, [])
 
   return (
     <header className="header">
@@ -61,12 +56,6 @@ export default function Header({ isConnected, account, onConnect, onDisconnect }
             Leaderboard
           </Link>
 
-          {!isConnected && (
-            <Button variant="primary" onClick={onConnect} style={{ whiteSpace: 'nowrap' }}>
-              Connect MetaMask
-            </Button>
-          )}
-
           {isConnected && (
             <Link href="/score" style={{ textDecoration: 'none' }}>
               <div className="score-display" style={{ cursor: 'pointer', color: '#ffffff' }}>
@@ -77,47 +66,41 @@ export default function Header({ isConnected, account, onConnect, onDisconnect }
               </div>
             </Link>
           )}
-          
-          {isConnected ? (
-            <div className="wallet-menu">
-              <div 
-                className="wallet-trigger"
-                onClick={() => setOpen(!open)}
-              >
-                <div className="wallet-status"></div>
-                <WalletIcon size={18} />
-                <span className="body-2 mono">
-                  {account ? `${account.slice(0, 6)}...${account.slice(-4)}` : ''}
-                </span>
-              </div>
-              
-              {open && (
-                <div className="wallet-dropdown">
-                  <div style={{ marginBottom: '16px' }}>
-                    <div className="title-3" style={{ marginBottom: '8px' }}>Connected Wallet</div>
-                    <div className="caption text-tertiary mono" style={{ 
-                      wordBreak: 'break-all',
-                      padding: '12px',
-                      background: 'var(--surface)',
-                      borderRadius: '8px',
-                      border: '1px solid var(--border)'
-                    }}>
-                      {account}
-                    </div>
-                  </div>
-                  <Button 
-                    variant="danger" 
-                    onClick={() => { onDisconnect(); setOpen(false); }} 
-                    fullWidth
+
+          <ConnectButton.Custom>
+            {({ account, chain, openConnectModal, openAccountModal, mounted }) => {
+              const ready = mounted
+              const connected = ready && account && chain
+
+              if (!connected) {
+                return (
+                  <Button
+                    variant="primary"
+                    onClick={openConnectModal}
+                    style={{ whiteSpace: 'nowrap' }}
                   >
-                    Disconnect Wallet
+                    Connect Wallet
                   </Button>
-                </div>
-              )}
-            </div>
-          ) : null}
+                )
+              }
+
+              return (
+                <button
+                  className="wallet-trigger"
+                  onClick={openAccountModal}
+                  style={{ whiteSpace: 'nowrap' }}
+                >
+                  <div className="wallet-status"></div>
+                  <WalletIcon size={18} />
+                  <span className="body-2 mono">
+                    {account?.displayName || `${address?.slice(0, 6)}...${address?.slice(-4)}`}
+                  </span>
+                </button>
+              )
+            }}
+          </ConnectButton.Custom>
         </div>
       </div>
     </header>
-  );
+  )
 }

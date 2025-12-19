@@ -1,8 +1,8 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { ethers } from 'ethers'
-import WalletConnection from './components/WalletConnection'
+import { useAccount } from 'wagmi'
+import { useConnectModal } from '@rainbow-me/rainbowkit'
 import Registration from './components/Registration'
 import QuizGame from './components/QuizGame'
 import ContractError from './components/ContractError'
@@ -11,81 +11,45 @@ import AdminQuestionForm from './components/AdminQuestionForm'
 import Card from './components/ui/Card'
 import Button from './components/ui/Button'
 import FeatureCard from './components/ui/FeatureCard'
-import { BrainIcon, ChainIcon, TrophyIcon, ArrowRightIcon, WalletIcon } from './components/icons'
-import { QuizGameContract } from './lib/contract'
+import { BrainIcon, ChainIcon, TrophyIcon, WalletIcon } from './components/icons'
 import { clearStoredScore, getStoredScore, setStoredScore } from './lib/scoreStore'
+import { useQuizContract } from './hooks/useQuizContract'
 
 export default function Home() {
-  const [provider, setProvider] = useState<ethers.BrowserProvider | null>(null)
-  const [signer, setSigner] = useState<ethers.JsonRpcSigner | null>(null)
-  const [contract, setContract] = useState<QuizGameContract | null>(null)
-  const [userAddress, setUserAddress] = useState<string>('')
+  const { address, isConnected } = useAccount()
+  const { openConnectModal } = useConnectModal()
+  const { contract, provider, error: contractInitError } = useQuizContract()
   const [isRegistered, setIsRegistered] = useState<boolean>(false)
-  const [isLoading, setIsLoading] = useState<boolean>(false)
   const [contractError, setContractError] = useState<boolean>(false)
   const [playerName, setPlayerName] = useState<string>('')
   const [score, setScore] = useState<number>(getStoredScore())
   const [isOwner, setIsOwner] = useState<boolean>(false)
 
-  const checkRegistration = async (address: string, gameContract: QuizGameContract) => {
+  const userAddress = address || ''
+
+  const checkRegistration = async () => {
+    if (!contract || !userAddress) return
     try {
-      const registered = await gameContract.hasRegistered(address)
+      const registered = await contract.hasRegistered(userAddress)
       setIsRegistered(registered)
       if (registered) {
-        const name = await gameContract.getMyName()
+        const name = await contract.getMyName()
         setPlayerName(name)
       } else {
         setPlayerName('')
       }
     } catch (error) {
       console.error('Error checking registration:', error)
-      // Fall back to keeping the user in the app rather than forcing re-registration
       setIsRegistered(true)
       setPlayerName('')
     }
   }
 
-  const handleWalletConnected = async (
-    newProvider: ethers.BrowserProvider,
-    newSigner: ethers.JsonRpcSigner,
-    address: string
-  ) => {
-    setProvider(newProvider)
-    setSigner(newSigner)
-    setUserAddress(address)
-
-    try {
-      // Initialize contract
-      const gameContract = new QuizGameContract(newSigner)
-      setContract(gameContract)
-
-      // Check if user is registered
-      await checkRegistration(address, gameContract)
-    } catch (error: any) {
-      console.error('Contract initialization failed:', error)
-      setContract(null)
-      setContractError(true)
-    }
-  }
-
   const handleRegistrationComplete = () => {
     setIsRegistered(true)
-    // reload name after registration succeeds
     if (contract) {
       contract.getMyName().then(setPlayerName).catch(() => setPlayerName(''))
     }
-  }
-
-  const handleDisconnect = () => {
-    setProvider(null)
-    setSigner(null)
-    setContract(null)
-    setUserAddress('')
-    setIsRegistered(false)
-    setContractError(false)
-    setIsOwner(false)
-    setScore(0)
-    clearStoredScore()
   }
 
   useEffect(() => {
@@ -101,73 +65,27 @@ export default function Home() {
     }
   }, [])
 
-  const handleRetry = async () => {
-    if (signer && userAddress) {
-      setContractError(false)
-      await handleWalletConnected(provider!, signer, userAddress)
-    }
-  }
-
-  // Auto-connect if MetaMask is already authorized (helps preserve state across routes)
   useEffect(() => {
-    const reconnect = async () => {
-      if (typeof window === 'undefined' || !(window as any).ethereum) return
-      try {
-        const accounts: string[] = await (window as any).ethereum.request({ method: 'eth_accounts' })
-        if (accounts && accounts.length > 0) {
-          const newProvider = new ethers.BrowserProvider((window as any).ethereum)
-          const newSigner = await newProvider.getSigner()
-          await handleWalletConnected(newProvider, newSigner, accounts[0])
-        }
-      } catch (error) {
-        console.error('Auto-connect failed:', error)
-      }
-    }
-    reconnect()
-  }, [])
+    setContractError(!!contractInitError)
+  }, [contractInitError])
 
-  const connectWallet = async () => {
-    if (typeof window !== 'undefined' && window.ethereum) {
-      try {
-        await window.ethereum.request({ method: 'eth_requestAccounts' });
-        const newProvider = new ethers.BrowserProvider(window.ethereum);
-        const newSigner = await newProvider.getSigner();
-        const address = await newSigner.getAddress();
-        await handleWalletConnected(newProvider, newSigner, address);
-      } catch (error) {
-        console.error('Error connecting wallet:', error);
-      }
-    } else {
-      alert('Please install MetaMask!');
-    }
-  };
-
-  // Sync when accounts change in MetaMask
   useEffect(() => {
-    const eth = (typeof window !== 'undefined' && (window as any).ethereum) || null
-    if (!eth) return
-
-    const handleAccountsChanged = async (accounts: string[]) => {
-      if (!accounts || accounts.length === 0) {
-        handleDisconnect()
-        return
-      }
+    let cancelled = false
+    const init = async () => {
+      if (!contract || !userAddress) return
       try {
-        const newProvider = new ethers.BrowserProvider(eth)
-        const newSigner = await newProvider.getSigner()
-        await handleWalletConnected(newProvider, newSigner, accounts[0])
+        await checkRegistration()
       } catch (err) {
-        console.error('Failed to handle accountsChanged:', err)
+        console.error('Failed to initialize contract connection:', err)
+        if (!cancelled) setContractError(true)
       }
     }
-
-    eth.on('accountsChanged', handleAccountsChanged)
+    init()
     return () => {
-      eth.removeListener('accountsChanged', handleAccountsChanged)
+      cancelled = true
     }
-  }, [])
+  }, [contract, userAddress])
 
-  // Determine owner privilege
   useEffect(() => {
     const checkOwner = async () => {
       if (!contract || !userAddress) {
@@ -180,21 +98,31 @@ export default function Home() {
       } catch (err: any) {
         console.error('Failed to fetch owner address:', err)
         setIsOwner(false)
-        // If contract call fails (e.g., bad address), skip owner UI gracefully
       }
     }
     checkOwner()
   }, [contract, userAddress])
 
+  useEffect(() => {
+    if (!isConnected) {
+      setIsRegistered(false)
+      setContractError(false)
+      setPlayerName('')
+      setIsOwner(false)
+      setScore(0)
+      clearStoredScore()
+    }
+  }, [isConnected])
+
+  const handleRetry = async () => {
+    setContractError(false)
+    await checkRegistration()
+  }
+
   return (
     <div className="page-container">
       {/* Header */}
-      <Header
-        isConnected={!!userAddress}
-        account={userAddress}
-        onConnect={connectWallet}
-        onDisconnect={handleDisconnect}
-      />
+      <Header />
 
       <main className="main-content">
         <div className="container">
@@ -216,7 +144,7 @@ export default function Home() {
           )}
 
           {/* Main Content */}
-          {!provider || !signer ? (
+          {!isConnected ? (
             <div className="landing-section">
               {/* Hero Section */}
               <div className="hero-section">
@@ -235,9 +163,9 @@ export default function Home() {
                   </p>
                   
                   <div className="hero-actions">
-                    <Button className="btn-primary btn-large" onClick={connectWallet}>
+                    <Button className="btn-primary btn-large" onClick={() => openConnectModal?.()}>
                       <WalletIcon size={20} />
-                      Connect MetaMask
+                      Connect Wallet
                     </Button>
                   </div>
                 </div>
@@ -269,8 +197,14 @@ export default function Home() {
                 </div>
               </div>
             </div>
-          ) : contractError || !contract ? (
+          ) : contractError ? (
             <ContractError onRetry={handleRetry} />
+          ) : !contract ? (
+            <Card className="registration-card" style={{ margin: '12px 0' }}>
+              <p className="body-2 text-secondary" style={{ margin: 0 }}>
+                Connecting to your wallet...
+              </p>
+            </Card>
           ) : !isRegistered ? (
             <Registration 
               contract={contract}

@@ -1,5 +1,6 @@
 import type { Metadata } from 'next'
 import './globals.css'
+import { Web3Providers } from './providers'
 
 export const metadata: Metadata = {
   title: 'HyBlock Quiz DApp',
@@ -15,7 +16,7 @@ export default function RootLayout({
     <html lang="en">
       <head />
       <body>
-        {children}
+        <Web3Providers>{children}</Web3Providers>
       </body>
     </html>
   )
