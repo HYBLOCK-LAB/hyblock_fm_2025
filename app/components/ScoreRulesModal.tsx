@@ -34,6 +34,7 @@ export default function ScoreRulesModal({ open, onClose, footer }: ScoreRulesMod
               <li>Balanced reveal (40-70% correct, or tie): +10 points</li>
               <li>Correct &gt; Wrong (outside band): +6 points</li>
               <li>Wrong &gt; Correct: +4 points</li>
+              <li>No submissions = no creator points</li>
             </ul>
           </div>
           <div className="caption text-tertiary">

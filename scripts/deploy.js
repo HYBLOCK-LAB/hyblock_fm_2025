@@ -16,10 +16,9 @@ async function main() {
   console.log("QuizGame deployed to:", contractAddress);
   console.log("Transaction hash:", quizGame.deploymentTransaction()?.hash);
 
-  // Add a sample question for demo
+  // Sample question flow removed for production deploy. Uncomment below if needed for demos.
+  /*
   console.log("\nAdding sample question...");
-  
-  // Create answer hash: keccak256(abi.encode(correctAnswer, salt))
   const correctAnswer = 2; // Third option (index 2)
   const salt = ethers.randomBytes(32);
   const answerHash = ethers.keccak256(
@@ -40,18 +39,18 @@ async function main() {
   await addQuestionTx.wait();
   console.log("Sample question added!");
 
-  // Reveal the answer
   console.log("Revealing answer...");
   const revealTx = await quizGame.revealAnswer(0, correctAnswer, salt);
   await revealTx.wait();
   console.log("Answer revealed!");
+  */
 
   console.log("\nDeployment Summary:");
   console.log("==================");
   console.log("Contract Address:", contractAddress);
   console.log("Owner Address:", deployer.address);
-  console.log("Sample Question ID: 0");
-  console.log("Correct Answer Index:", correctAnswer);
+  // Sample Question ID: 0
+  // Correct Answer Index: correctAnswer
   console.log("\nUpdate your .env file with:");
   console.log(`NEXT_PUBLIC_CONTRACT_ADDRESS=${contractAddress}`);
 }

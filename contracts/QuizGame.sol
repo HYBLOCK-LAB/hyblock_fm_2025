@@ -201,8 +201,10 @@ contract QuizGame {
                 creatorReward = CREATOR_REWARD_BEST;
             }
 
-            playerScores[msg.sender] += creatorReward;
-            emit ScoreUpdated(msg.sender, playerScores[msg.sender]);
+            if (creatorReward > 0) {
+                playerScores[msg.sender] += creatorReward;
+                emit ScoreUpdated(msg.sender, playerScores[msg.sender]);
+            }
         }
 
         emit AnswerRevealed(_questionId, _correctAnswer, _salt);

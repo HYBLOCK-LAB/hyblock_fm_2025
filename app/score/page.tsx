@@ -1,10 +1,11 @@
 'use client'
 
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useState } from 'react'
 import Button from '../components/ui/Button'
 import ScoreRulesModal from '../components/ScoreRulesModal'
 import { AnsweredRow, CreatedRow, fetchScoreBreakdown, scoreRuleCopy } from '../lib/score'
 import Header from '../components/Header'
+import { clearStoredScore, getStoredScore, setStoredScore } from '../lib/scoreStore'
 
 type AccountState = 'idle' | 'connecting' | 'connected' | 'error'
 
@@ -25,75 +26,79 @@ const formatBand = (row: CreatedRow) => {
 }
 
 const AnsweredTable = ({ rows }: { rows: AnsweredRow[] }) => (
-  <table className="score-table">
-    <thead>
-      <tr>
-        <th style={{ width: 90 }}>Question</th>
-        <th>Text</th>
-        <th style={{ width: 140 }}>My answer</th>
-        <th style={{ width: 150 }}>Correct answer</th>
-        <th style={{ width: 120 }}>Status</th>
-        <th style={{ width: 90, textAlign: 'right' }}>Points</th>
-      </tr>
-    </thead>
-    <tbody>
-      {rows.length === 0 ? (
+  <div className="table-wrapper">
+    <table className="score-table">
+      <thead>
         <tr>
-          <td colSpan={6} style={{ textAlign: 'center', padding: '18px 0', color: '#9ca3af' }}>
-            No answered questions yet.
-          </td>
+          <th style={{ width: 90 }}>Question</th>
+          <th>Text</th>
+          <th style={{ width: 140 }}>My answer</th>
+          <th style={{ width: 150 }}>Correct answer</th>
+          <th style={{ width: 120 }}>Status</th>
+          <th style={{ width: 90, textAlign: 'right' }}>Points</th>
         </tr>
-      ) : (
-        rows.map((row) => (
-          <tr key={row.questionId}>
-            <td>#{row.questionId + 1}</td>
-            <td className="text-ellipsis">{formatQuestion(row.questionText)}</td>
-            <td>{formatOption(row.myAnswer)}</td>
-            <td>{row.isRevealed ? formatOption(row.correctAnswer) : 'Pending reveal'}</td>
-            <td>{row.isRevealed ? 'Revealed' : 'Waiting'}</td>
-            <td style={{ textAlign: 'right', fontWeight: 700 }}>{row.earned}</td>
+      </thead>
+      <tbody>
+        {rows.length === 0 ? (
+          <tr>
+            <td colSpan={6} style={{ textAlign: 'center', padding: '18px 0', color: '#9ca3af' }}>
+              No answered questions yet.
+            </td>
           </tr>
-        ))
-      )}
-    </tbody>
-  </table>
+        ) : (
+          rows.map((row) => (
+            <tr key={row.questionId}>
+              <td>#{row.questionId + 1}</td>
+              <td className="text-ellipsis">{formatQuestion(row.questionText)}</td>
+              <td>{formatOption(row.myAnswer)}</td>
+              <td>{row.isRevealed ? formatOption(row.correctAnswer) : 'Pending reveal'}</td>
+              <td>{row.isRevealed ? 'Revealed' : 'Waiting'}</td>
+              <td style={{ textAlign: 'right', fontWeight: 700 }}>{row.earned}</td>
+            </tr>
+          ))
+        )}
+      </tbody>
+    </table>
+  </div>
 )
 
 const CreatedTable = ({ rows }: { rows: CreatedRow[] }) => (
-  <table className="score-table">
-    <thead>
-      <tr>
-        <th style={{ width: 90 }}>Question</th>
-        <th>Text</th>
-        <th style={{ width: 120 }}>Status</th>
-        <th style={{ width: 150 }}>Reveal ratio</th>
-        <th style={{ width: 150 }}>Correct / Wrong</th>
-        <th style={{ width: 90, textAlign: 'right' }}>Points</th>
-      </tr>
-    </thead>
-    <tbody>
-      {rows.length === 0 ? (
+  <div className="table-wrapper">
+    <table className="score-table">
+      <thead>
         <tr>
-          <td colSpan={6} style={{ textAlign: 'center', padding: '18px 0', color: '#9ca3af' }}>
-            No created questions yet.
-          </td>
+          <th style={{ width: 90 }}>Question</th>
+          <th>Text</th>
+          <th style={{ width: 120 }}>Status</th>
+          <th style={{ width: 150 }}>Reveal ratio</th>
+          <th style={{ width: 150 }}>Correct / Wrong</th>
+          <th style={{ width: 90, textAlign: 'right' }}>Points</th>
         </tr>
-      ) : (
-        rows.map((row) => (
-          <tr key={row.questionId}>
-            <td>#{row.questionId + 1}</td>
-            <td className="text-ellipsis">{formatQuestion(row.questionText)}</td>
-            <td>{row.isRevealed ? 'Revealed' : 'Waiting'}</td>
-            <td>{formatBand(row)}</td>
-            <td>
-              {row.correctCount} / {row.wrongCount}
+      </thead>
+      <tbody>
+        {rows.length === 0 ? (
+          <tr>
+            <td colSpan={6} style={{ textAlign: 'center', padding: '18px 0', color: '#9ca3af' }}>
+              No created questions yet.
             </td>
-            <td style={{ textAlign: 'right', fontWeight: 700 }}>{row.earned}</td>
           </tr>
-        ))
-      )}
-    </tbody>
-  </table>
+        ) : (
+          rows.map((row) => (
+            <tr key={row.questionId}>
+              <td>#{row.questionId + 1}</td>
+              <td className="text-ellipsis">{formatQuestion(row.questionText)}</td>
+              <td>{row.isRevealed ? 'Revealed' : 'Waiting'}</td>
+              <td>{formatBand(row)}</td>
+              <td>
+                {row.correctCount} / {row.wrongCount}
+              </td>
+              <td style={{ textAlign: 'right', fontWeight: 700 }}>{row.earned}</td>
+            </tr>
+          ))
+        )}
+      </tbody>
+    </table>
+  </div>
 )
 
 export default function ScorePage() {
@@ -104,7 +109,7 @@ export default function ScorePage() {
   const [answered, setAnswered] = useState<AnsweredRow[]>([])
   const [created, setCreated] = useState<CreatedRow[]>([])
   const [showRules, setShowRules] = useState(false)
-  const [totalScore, setTotalScore] = useState(0)
+  const [totalScore, setTotalScore] = useState(getStoredScore())
 
   const connect = async () => {
     if (typeof window === 'undefined' || !(window as any).ethereum) {
@@ -134,6 +139,7 @@ export default function ScorePage() {
       setAnswered(answered)
       setCreated(created)
       setTotalScore(totalScore)
+      setStoredScore(totalScore)
     } catch (err: any) {
       console.error('Failed to load score breakdown', err)
       setError(err?.message || 'Failed to load scores.')
@@ -149,6 +155,7 @@ export default function ScorePage() {
     setTotalScore(0)
     setStatus('idle')
     setError(null)
+    clearStoredScore()
   }
 
   useEffect(() => {
@@ -174,12 +181,24 @@ export default function ScorePage() {
     }
   }, [account])
 
+  useEffect(() => {
+    const sync = () => setTotalScore(getStoredScore())
+    sync()
+    if (typeof window !== 'undefined') {
+      window.addEventListener('focus', sync)
+    }
+    return () => {
+      if (typeof window !== 'undefined') {
+        window.removeEventListener('focus', sync)
+      }
+    }
+  }, [])
+
   return (
     <div className="page-container">
       <Header
         isConnected={!!account}
         account={account}
-        score={totalScore}
         onConnect={connect}
         onDisconnect={handleDisconnect}
       />

@@ -43,7 +43,6 @@ export default function LeaderboardLayout({ children }: { children: ReactNode })
       <Header
         isConnected={!!account}
         account={account}
-        score={0}
         onConnect={connect}
         onDisconnect={() => setAccount(null)}
       />

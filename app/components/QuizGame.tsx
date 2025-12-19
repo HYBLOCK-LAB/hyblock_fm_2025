@@ -6,6 +6,7 @@ import { QuizGameContract, QuestionData, QuestionState, QUIZ_GAME_ABI } from '..
 import Accordion from './ui/Accordion'
 import { AnsweredIcon, CheckIcon, RefreshIcon } from './icons'
 import Button from './ui/Button'
+import { setStoredScore } from '../lib/scoreStore'
 
 interface QuizGameProps {
   contract: QuizGameContract | null
@@ -98,6 +99,7 @@ const [revealInputs, setRevealInputs] = useState<Record<number, { answer: number
           currentScore: scoreNumber
         }))
         onScoreUpdate?.(scoreNumber);
+        setStoredScore(scoreNumber)
       }
     }
 
@@ -178,16 +180,54 @@ const [revealInputs, setRevealInputs] = useState<Record<number, { answer: number
     setError('')
 
     try {
+      if (!userAddress) {
+        setError('')
+        setIsLoading(false)
+        return
+      }
+
+      // Soft registration check (do not block entry on failure)
+      try {
+        const registered = await contract.hasRegistered(userAddress)
+        if (!registered) {
+          setError('No quiz yet—create one to get started!')
+          setIsLoading(false)
+          return
+        }
+      } catch {
+        // ignore check failure; continue
+      }
+
+      const safeName = async () => {
+        try {
+          return await contract.getMyName()
+        } catch {
+          return ''
+        }
+      }
+
+      const safeScore = async () => {
+        try {
+          const s = await contract.getMyScore()
+          return Number(s)
+        } catch {
+          return 0
+        }
+      }
+
       // Load player data
       const [name, score, questionCountBig] = await Promise.all([
-        contract.getMyName(),
-        contract.getMyScore(),
+        safeName(),
+        safeScore(),
         contract.getQuestionCount()
       ])
 
       const questionCount = Number(questionCountBig)
       if (questionCount === 0) {
-        throw new Error('No questions available')
+        setError('')
+        setQuestionList([])
+        setIsLoading(false)
+        return
       }
 
       const total = Number(questionCount)
@@ -267,6 +307,7 @@ const [revealInputs, setRevealInputs] = useState<Record<number, { answer: number
 
       const scoreNumber = Number(score);
       onScoreUpdate?.(scoreNumber);
+      setStoredScore(scoreNumber);
 
       const loadStoredSelections = (): Record<number, number | null> => {
         if (typeof window === 'undefined' || !userAddress) return {}
@@ -571,13 +612,16 @@ const [revealInputs, setRevealInputs] = useState<Record<number, { answer: number
 
   if (!gameState.question || !gameState.questionState) {
     return (
-      <div className="card">
-        <div style={{ textAlign: 'center', color: '#666' }}>
-          <h3>No Quiz Available</h3>
-          <p>{error || 'There are no quiz questions at the moment.'}</p>
-          <button className="button" onClick={initializeGame}>
+      <div className="empty-state">
+        <div className="empty-state__icon">🤔</div>
+        <h3 className="empty-state__title">No quiz available right now</h3>
+        <p className="empty-state__desc">
+          {error || 'New questions will appear here once they are created.'}
+        </p>
+        <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', justifyContent: 'center' }}>
+          <Button variant="primary" onClick={initializeGame}>
             Refresh
-          </button>
+          </Button>
         </div>
       </div>
     )
@@ -585,40 +629,36 @@ const [revealInputs, setRevealInputs] = useState<Record<number, { answer: number
 
   return (
     <div>
-      <div className="card">
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <div>
-            <h3 style={{ margin: '0 0 8px 0', color: '#333' }}>
-              Welcome, {gameState.playerName}
-            </h3>
-            <p style={{ margin: 0, color: '#666' }}>
-              Current Score: <strong>{gameState.currentScore} points</strong>
-            </p>
-          </div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            <button
-              className="btn-secondary"
-              onClick={initializeGame}
-              style={{ padding: '8px', width: 40, height: 40, display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}
-              aria-label="Refresh questions"
-            >
-              <RefreshIcon size={18} />
-            </button>
-            {gameState.hasAnswered ? (
-              <span className="status-badge status-correct">Completed</span>
-            ) : gameState.showResult ? (
-              <span className={`status-badge ${gameState.isCorrect ? 'status-correct' : 'status-incorrect'}`}>
-                {gameState.isCorrect ? 'Correct' : 'Incorrect'}
-              </span>
-            ) : (
-              <span className="status-badge status-waiting">In Progress</span>
-            )}
-          </div>
+      <div className="card" style={{ margin: '0 0 16px 0', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12 }}>
+        <div>
+          <div className="overline text-tertiary" style={{ marginBottom: 4 }}>Player</div>
+          <h3 style={{ margin: '0 0 6px 0', color: '#ffffff' }}>
+            {gameState.playerName}
+          </h3>
+          <p style={{ margin: 0, color: '#9ca3af' }}>
+            Current score: <strong style={{ color: '#ffffff' }}>{gameState.currentScore} pts</strong>
+          </p>
         </div>
+        <button
+          className="btn-secondary"
+          onClick={initializeGame}
+          style={{
+            padding: '10px 14px',
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: 8,
+            minWidth: 0,
+            whiteSpace: 'nowrap'
+          }}
+          aria-label="Refresh questions"
+        >
+          <RefreshIcon size={18} />
+          <span>Refresh</span>
+        </button>
       </div>
 
       {/* Question */}
-      <div className="card">
+
         
         {error && (
           <div className="error" style={{ marginBottom: '20px' }}>
@@ -694,7 +734,7 @@ const [revealInputs, setRevealInputs] = useState<Record<number, { answer: number
             }, 0)
           }}
         />
-      </div>
+
     </div>
   )
 }

@@ -113,7 +113,7 @@ export default function CreateQuestionForm({ contract, account }: CreateQuestion
           />
         </label>
 
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 12 }}>
+        <div className="option-grid">
           {options.map((opt, idx) => (
             <label key={idx} className="body-2" style={{ display: 'block' }}>
               Option {idx + 1}

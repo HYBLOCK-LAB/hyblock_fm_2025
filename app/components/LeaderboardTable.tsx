@@ -20,15 +20,15 @@ export default function LeaderboardTable({ entries, isLoading, error, onRefresh 
 
   return (
     <Card className="registration-card" style={{ maxWidth: 900, margin: '24px auto' }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12 }}>
+      <div className="leaderboard-head">
         <div>
           <div className="overline text-tertiary">LEADERBOARD</div>
           <h2 className="title-2" style={{ margin: '6px 0' }}>Top Players</h2>
-          <p className="body-2 text-secondary" style={{ margin: 0 }}>
-            Reads contract data without login. Network latency may apply.
+          <p className="body-2 text-secondary subtle-line">
+            On-chain scores, no login. Refresh if data lags.
           </p>
         </div>
-        <div style={{ display: 'flex', gap: 8 }}>
+        <div className="leaderboard-actions">
           <button className="btn-secondary" onClick={() => setShowTooltip(true)} style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
             <InfoIcon size={16} />
             Score rules

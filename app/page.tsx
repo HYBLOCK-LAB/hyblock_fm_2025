@@ -13,6 +13,7 @@ import Button from './components/ui/Button'
 import FeatureCard from './components/ui/FeatureCard'
 import { BrainIcon, ChainIcon, TrophyIcon, ArrowRightIcon, WalletIcon } from './components/icons'
 import { QuizGameContract } from './lib/contract'
+import { clearStoredScore, getStoredScore, setStoredScore } from './lib/scoreStore'
 
 export default function Home() {
   const [provider, setProvider] = useState<ethers.BrowserProvider | null>(null)
@@ -23,7 +24,7 @@ export default function Home() {
   const [isLoading, setIsLoading] = useState<boolean>(false)
   const [contractError, setContractError] = useState<boolean>(false)
   const [playerName, setPlayerName] = useState<string>('')
-  const [score, setScore] = useState<number>(0)
+  const [score, setScore] = useState<number>(getStoredScore())
   const [isOwner, setIsOwner] = useState<boolean>(false)
 
   const checkRegistration = async (address: string, gameContract: QuizGameContract) => {
@@ -38,7 +39,8 @@ export default function Home() {
       }
     } catch (error) {
       console.error('Error checking registration:', error)
-      setIsRegistered(false)
+      // Fall back to keeping the user in the app rather than forcing re-registration
+      setIsRegistered(true)
       setPlayerName('')
     }
   }
@@ -82,7 +84,22 @@ export default function Home() {
     setIsRegistered(false)
     setContractError(false)
     setIsOwner(false)
+    setScore(0)
+    clearStoredScore()
   }
+
+  useEffect(() => {
+    const syncScore = () => setScore(getStoredScore())
+    syncScore()
+    if (typeof window !== 'undefined') {
+      window.addEventListener('focus', syncScore)
+    }
+    return () => {
+      if (typeof window !== 'undefined') {
+        window.removeEventListener('focus', syncScore)
+      }
+    }
+  }, [])
 
   const handleRetry = async () => {
     if (signer && userAddress) {
@@ -160,9 +177,10 @@ export default function Home() {
       try {
         const owner = await contract.getOwner()
         setIsOwner(owner.toLowerCase() === userAddress.toLowerCase())
-      } catch (err) {
+      } catch (err: any) {
         console.error('Failed to fetch owner address:', err)
         setIsOwner(false)
+        // If contract call fails (e.g., bad address), skip owner UI gracefully
       }
     }
     checkOwner()
@@ -174,7 +192,6 @@ export default function Home() {
       <Header
         isConnected={!!userAddress}
         account={userAddress}
-        score={score}
         onConnect={connectWallet}
         onDisconnect={handleDisconnect}
       />
@@ -266,7 +283,10 @@ export default function Home() {
             <QuizGame 
               contract={contract}
               userAddress={userAddress}
-              onScoreUpdate={(newScore) => setScore(newScore)}
+              onScoreUpdate={(newScore) => {
+                setScore(newScore)
+                setStoredScore(newScore)
+              }}
               provider={provider}
             />
           )}

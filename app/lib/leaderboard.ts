@@ -20,6 +20,16 @@ const getProvider = (rpcUrl?: string) => {
   return new ethers.JsonRpcProvider(url)
 }
 
+const parseStartBlock = (): bigint => {
+  const raw = process.env.NEXT_PUBLIC_LOG_START_BLOCK || process.env.LOG_START_BLOCK
+  if (!raw) return 0n
+  try {
+    return BigInt(raw)
+  } catch {
+    return 0n
+  }
+}
+
 export async function fetchLeaderboard(rpcUrl?: string): Promise<LeaderboardEntry[]> {
   const contractAddress = process.env.NEXT_PUBLIC_CONTRACT_ADDRESS
   if (!contractAddress) {
@@ -29,6 +39,27 @@ export async function fetchLeaderboard(rpcUrl?: string): Promise<LeaderboardEntr
   const provider = getProvider(rpcUrl)
   const contract = new ethers.Contract(contractAddress, QUIZ_GAME_ABI, provider)
   const iface = new ethers.Interface(QUIZ_GAME_ABI)
+  let ownerAddress: string | null = null
+  try {
+    ownerAddress = (await contract.owner())?.toLowerCase?.() ?? null
+  } catch {
+    ownerAddress = null
+  }
+
+  const parseBlacklist = () => {
+    const raw =
+      process.env.NEXT_PUBLIC_LEADERBOARD_BLACKLIST ||
+      process.env.LEADERBOARD_BLACKLIST ||
+      process.env.NEXT_PUBLIC_EXCLUDE_ADDRESSES || // backward compatible
+      ''
+    return raw
+      .split(',')
+      .map((a) => a.trim().toLowerCase())
+      .filter(Boolean)
+  }
+
+  const excludedSet = new Set<string>(parseBlacklist())
+  if (ownerAddress) excludedSet.add(ownerAddress)
 
   const registerEvent = iface.getEvent('PlayerRegistered')
   const nameChangedEvent = iface.getEvent('NameChanged')
@@ -38,9 +69,20 @@ export async function fetchLeaderboard(rpcUrl?: string): Promise<LeaderboardEntr
   const registerTopic = registerEvent.topicHash
   const nameChangedTopic = nameChangedEvent.topicHash
 
+  const fromBlock = parseStartBlock()
   const [registeredLogs, nameChangedLogs] = await Promise.all([
-    provider.getLogs({ address: contractAddress, topics: [registerTopic], fromBlock: 0n }),
-    provider.getLogs({ address: contractAddress, topics: [nameChangedTopic], fromBlock: 0n })
+    provider.getLogs({ address: contractAddress, topics: [registerTopic], fromBlock }).catch((err: any) => {
+      if (err?.code === -32005) {
+        throw new Error('RPC rate limit exceeded. Please retry later or configure a dedicated RPC key.')
+      }
+      throw err
+    }),
+    provider.getLogs({ address: contractAddress, topics: [nameChangedTopic], fromBlock }).catch((err: any) => {
+      if (err?.code === -32005) {
+        throw new Error('RPC rate limit exceeded. Please retry later or configure a dedicated RPC key.')
+      }
+      throw err
+    }),
   ])
 
   const players = new Map<string, string>() // address -> latest name (from events)
@@ -64,10 +106,12 @@ export async function fetchLeaderboard(rpcUrl?: string): Promise<LeaderboardEntr
   })
 
   const addresses = Array.from(players.keys())
-  if (addresses.length === 0) return []
+  const filteredAddresses = addresses.filter((addr) => !excludedSet.has(addr))
+
+  if (filteredAddresses.length === 0) return []
 
   const entries = await Promise.all(
-    addresses.map(async (addr) => {
+    filteredAddresses.map(async (addr) => {
       try {
         const [name, score] = await Promise.all([
           contract.getPlayerName(addr),
@@ -85,7 +129,10 @@ export async function fetchLeaderboard(rpcUrl?: string): Promise<LeaderboardEntr
     })
   )
 
-  const filtered = entries.filter(Boolean) as LeaderboardEntry[]
+  const filtered = (entries.filter(Boolean) as LeaderboardEntry[]).filter(
+    (entry) => !excludedSet.has(entry.address.toLowerCase())
+  )
+
   filtered.sort((a, b) => b.score - a.score || a.name.localeCompare(b.name))
 
   return filtered

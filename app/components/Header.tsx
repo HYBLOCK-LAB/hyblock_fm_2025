@@ -1,22 +1,32 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import Image from 'next/image';
 import Link from 'next/link';
 import Button from './ui/Button';
 import { TrophyIcon, WalletIcon } from './icons';
+import { getStoredScore } from '../lib/scoreStore';
 
 interface HeaderProps {
   isConnected: boolean;
   account: string | null;
-  score: number;
   onConnect: () => void;
   onDisconnect: () => void;
 }
 
-export default function Header({ isConnected, account, score, onConnect, onDisconnect }: HeaderProps) {
+export default function Header({ isConnected, account, onConnect, onDisconnect }: HeaderProps) {
   const [open, setOpen] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [displayScore, setDisplayScore] = useState<number>(getStoredScore());
+
+  useEffect(() => {
+    const sync = () => setDisplayScore(getStoredScore());
+    sync();
+    if (typeof window !== 'undefined') {
+      window.addEventListener('focus', sync);
+      return () => window.removeEventListener('focus', sync);
+    }
+  }, []);
 
   return (
     <header className="header">
@@ -62,7 +72,7 @@ export default function Header({ isConnected, account, score, onConnect, onDisco
               <div className="score-display" style={{ cursor: 'pointer', color: '#ffffff' }}>
                 <TrophyIcon size={18} className="score-icon" />
                 <div>
-                  <div className="title-3">{score}</div>
+                  <div className="title-3">{displayScore}</div>
                 </div>
               </div>
             </Link>

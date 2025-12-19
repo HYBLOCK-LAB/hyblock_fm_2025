@@ -27,6 +27,8 @@ export default function Registration({ contract, onRegistrationComplete }: Regis
     setIsRegistering(true)
     setError('')
 
+    let handled = false
+
     try {
       // Check if contract is available
       if (!contract) {
@@ -40,6 +42,8 @@ export default function Registration({ contract, onRegistrationComplete }: Regis
         if (contract) {
           contract.removeAllListeners()
         }
+        handled = true
+        setIsRegistering(false)
         onRegistrationComplete(playerName.trim())
       }
 
@@ -52,7 +56,15 @@ export default function Registration({ contract, onRegistrationComplete }: Regis
       // Wait for transaction confirmation
       await tx.wait()
       console.log('Registration transaction confirmed')
-      
+
+      // Fallback in case event wasn't received
+      if (!handled) {
+        if (contract) {
+          contract.removeAllListeners()
+        }
+        setIsRegistering(false)
+        onRegistrationComplete(playerName.trim())
+      }
     } catch (error: any) {
       console.error('Registration error:', error)
       if (contract) {
