@@ -1,13 +1,13 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import { useAccount } from 'wagmi'
+import { useConnectModal } from '@rainbow-me/rainbowkit'
 import Button from '../components/ui/Button'
 import ScoreRulesModal from '../components/ScoreRulesModal'
 import { AnsweredRow, CreatedRow, fetchScoreBreakdown, scoreRuleCopy } from '../lib/score'
 import Header from '../components/Header'
 import { clearStoredScore, getStoredScore, setStoredScore } from '../lib/scoreStore'
-
-type AccountState = 'idle' | 'connecting' | 'connected' | 'error'
 
 const formatOption = (value: number | null) => {
   if (value === null || Number.isNaN(value)) return '—'
@@ -102,34 +102,15 @@ const CreatedTable = ({ rows }: { rows: CreatedRow[] }) => (
 )
 
 export default function ScorePage() {
-  const [account, setAccount] = useState<string>('')
-  const [status, setStatus] = useState<AccountState>('idle')
+  const { address } = useAccount()
+  const { openConnectModal } = useConnectModal()
+  const account = address || ''
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [answered, setAnswered] = useState<AnsweredRow[]>([])
   const [created, setCreated] = useState<CreatedRow[]>([])
   const [showRules, setShowRules] = useState(false)
   const [totalScore, setTotalScore] = useState(getStoredScore())
-
-  const connect = async () => {
-    if (typeof window === 'undefined' || !(window as any).ethereum) {
-      setError('Please install MetaMask.')
-      return
-    }
-    try {
-      setStatus('connecting')
-      const accounts: string[] = await (window as any).ethereum.request({ method: 'eth_requestAccounts' })
-      const addr = accounts?.[0]
-      if (!addr) throw new Error('Unable to fetch wallet address.')
-      setAccount(addr)
-      setStatus('connected')
-      setError(null)
-    } catch (err: any) {
-      console.error(err)
-      setStatus('error')
-      setError(err?.message || 'Failed to connect wallet.')
-    }
-  }
 
   const loadScores = async (addr: string) => {
     setLoading(true)
@@ -148,36 +129,15 @@ export default function ScorePage() {
     }
   }
 
-  const handleDisconnect = () => {
-    setAccount('')
-    setAnswered([])
-    setCreated([])
-    setTotalScore(0)
-    setStatus('idle')
-    setError(null)
-    clearStoredScore()
-  }
-
-  useEffect(() => {
-    const init = async () => {
-      if (typeof window === 'undefined' || !(window as any).ethereum) return
-      try {
-        const accounts: string[] = await (window as any).ethereum.request({ method: 'eth_accounts' })
-        const addr = accounts?.[0]
-        if (addr) {
-          setAccount(addr)
-          setStatus('connected')
-        }
-      } catch {
-        // ignore
-      }
-    }
-    init()
-  }, [])
-
   useEffect(() => {
     if (account) {
       loadScores(account)
+    } else {
+      setAnswered([])
+      setCreated([])
+      setError(null)
+      setTotalScore(0)
+      clearStoredScore()
     }
   }, [account])
 
@@ -196,12 +156,7 @@ export default function ScorePage() {
 
   return (
     <div className="page-container">
-      <Header
-        isConnected={!!account}
-        account={account}
-        onConnect={connect}
-        onDisconnect={handleDisconnect}
-      />
+      <Header />
       <main className="main-content">
         <div className="container">
           <section style={{ padding: '36px 0 16px' }}>
@@ -215,7 +170,15 @@ export default function ScorePage() {
                 <Button variant="secondary" onClick={() => setShowRules(true)} style={{ whiteSpace: 'nowrap' }}>
                   View rules
                 </Button>
-                <Button variant="primary" onClick={account ? () => loadScores(account) : connect} disabled={loading}>
+                <Button
+                  variant="primary"
+                  onClick={
+                    account
+                      ? () => loadScores(account)
+                      : () => openConnectModal?.()
+                  }
+                  disabled={loading}
+                >
                   {account ? (loading ? 'Loading...' : 'Refresh') : 'Connect wallet'}
                 </Button>
               </div>
