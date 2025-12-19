@@ -30,6 +30,37 @@ const parseStartBlock = (): bigint => {
   }
 }
 
+const parseLookbackBlocks = (): bigint => {
+  const defaultHours = 4 // default lookback (~4h) to avoid massive scans on free RPC tiers
+  const rawBlocks = process.env.NEXT_PUBLIC_LOG_LOOKBACK_BLOCKS || process.env.LOG_LOOKBACK_BLOCKS
+  if (rawBlocks) {
+    try {
+      const val = BigInt(rawBlocks)
+      if (val > 0) return val
+    } catch {
+      /* ignore */
+    }
+  }
+
+  const rawHours = process.env.NEXT_PUBLIC_LOG_LOOKBACK_HOURS || process.env.LOG_LOOKBACK_HOURS
+  const hours = rawHours ? Number(rawHours) : defaultHours
+  if (!Number.isNaN(hours) && hours > 0) {
+    // Sepolia ~12s block time -> ~300 blocks/hour
+    const blocks = Math.max(1, Math.round(hours * 300))
+    return BigInt(blocks)
+  }
+
+  return 0n
+}
+
+const resolveFromBlock = async (provider: ethers.JsonRpcProvider, fallback: bigint) => {
+  const lookback = parseLookbackBlocks()
+  if (lookback === 0n) return fallback
+  const latest = await provider.getBlockNumber()
+  const fromLookback = latest >= lookback ? BigInt(latest) - lookback + 1n : 0n
+  return fromLookback > fallback ? fromLookback : fallback
+}
+
 export async function fetchLeaderboard(rpcUrl?: string): Promise<LeaderboardEntry[]> {
   const contractAddress = process.env.NEXT_PUBLIC_CONTRACT_ADDRESS
   if (!contractAddress) {
@@ -69,17 +100,51 @@ export async function fetchLeaderboard(rpcUrl?: string): Promise<LeaderboardEntr
   const registerTopic = registerEvent.topicHash
   const nameChangedTopic = nameChangedEvent.topicHash
 
-  const fromBlock = parseStartBlock()
+  const isTinyRangeError = (err: any) => {
+    const msg = err?.message || ''
+    return msg.includes('10 block range') || err?.code === -32600
+  }
+
+  const fetchLogsChunked = async (
+    topics: Array<string | null>,
+    fromBlock: bigint | number | undefined
+  ) => {
+    const latest = await provider.getBlockNumber()
+    const windowSize = 1500
+    const from = typeof fromBlock === 'number' ? fromBlock : Number(fromBlock ?? 0)
+    const results: ethers.Log[] = []
+    let start = from
+    while (start <= latest) {
+      const end = Math.min(start + windowSize - 1, latest)
+      const logs = await provider.getLogs({
+        address: contractAddress,
+        topics,
+        fromBlock: start,
+        toBlock: end,
+      })
+      results.push(...logs)
+      start = end + 1
+    }
+    return results
+  }
+
+  const fromBlock = await resolveFromBlock(provider, parseStartBlock())
   const [registeredLogs, nameChangedLogs] = await Promise.all([
-    provider.getLogs({ address: contractAddress, topics: [registerTopic], fromBlock }).catch((err: any) => {
+    provider.getLogs({ address: contractAddress, topics: [registerTopic], fromBlock }).catch(async (err: any) => {
       if (err?.code === -32005) {
         throw new Error('RPC rate limit exceeded. Please retry later or configure a dedicated RPC key.')
       }
+      if (isTinyRangeError(err)) {
+        return fetchLogsChunked([registerTopic], fromBlock)
+      }
       throw err
     }),
-    provider.getLogs({ address: contractAddress, topics: [nameChangedTopic], fromBlock }).catch((err: any) => {
+    provider.getLogs({ address: contractAddress, topics: [nameChangedTopic], fromBlock }).catch(async (err: any) => {
       if (err?.code === -32005) {
         throw new Error('RPC rate limit exceeded. Please retry later or configure a dedicated RPC key.')
+      }
+      if (isTinyRangeError(err)) {
+        return fetchLogsChunked([nameChangedTopic], fromBlock)
       }
       throw err
     }),

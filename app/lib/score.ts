@@ -27,6 +27,65 @@ const getProvider = (rpcUrl?: string): Provider => {
 
 const zeroPadQuestionId = (questionId: number) => ethers.zeroPadValue(ethers.toBeHex(questionId), 32)
 
+const isTinyRangeError = (err: any) => {
+  const msg = err?.message || ''
+  return msg.includes('10 block range') || err?.code === -32600
+}
+
+const parseLookbackBlocks = (): bigint => {
+  const defaultHours = 4 // default lookback (~4h) to avoid massive scans on free RPC tiers
+  const rawBlocks = process.env.NEXT_PUBLIC_LOG_LOOKBACK_BLOCKS || process.env.LOG_LOOKBACK_BLOCKS
+  if (rawBlocks) {
+    try {
+      const val = BigInt(rawBlocks)
+      if (val > 0n) return val
+    } catch {
+      /* ignore */
+    }
+  }
+
+  const rawHours = process.env.NEXT_PUBLIC_LOG_LOOKBACK_HOURS || process.env.LOG_LOOKBACK_HOURS
+  const hours = rawHours ? Number(rawHours) : defaultHours
+  if (!Number.isNaN(hours) && hours > 0) {
+    // Sepolia ~12s block time -> ~300 blocks/hour
+    const blocks = Math.max(1, Math.round(hours * 300))
+    return BigInt(blocks)
+  }
+
+  return 0n
+}
+
+const resolveFromBlock = async (provider: Provider, fallback: bigint) => {
+  const lookback = parseLookbackBlocks()
+  if (lookback === 0n) return fallback
+  const latest = await provider.getBlockNumber()
+  const fromLookback = latest >= lookback ? BigInt(latest) - lookback + 1n : 0n
+  return fromLookback > fallback ? fromLookback : fallback
+}
+
+const fetchLogsChunked = async (
+  provider: Provider,
+  params: { address?: string; topics?: Array<string | null>; fromBlock?: bigint | number; toBlock?: bigint | number }
+) => {
+  const latest = await provider.getBlockNumber()
+  const windowSize = 1500
+  const from = typeof params.fromBlock === 'number' ? params.fromBlock : Number(params.fromBlock ?? 0)
+  const results: ethers.Log[] = []
+
+  let start = from
+  while (start <= latest) {
+    const end = Math.min(start + windowSize - 1, latest)
+    const logs = await provider.getLogs({
+      ...params,
+      fromBlock: start,
+      toBlock: end,
+    })
+    results.push(...logs)
+    start = end + 1
+  }
+  return results
+}
+
 export interface AnsweredRow {
   questionId: number
   questionText: string
@@ -135,11 +194,25 @@ export const fetchScoreBreakdown = async (userAddress: string, rpcUrl?: string):
         }
 
         if (correctAnswer !== null) {
-          const logs = await provider.getLogs({
-            address: contractAddress,
-            topics: [answerSubmittedTopic, null, zeroPadQuestionId(i)],
-            fromBlock: 0n,
-          })
+          let logs: ethers.Log[] = []
+          const baseFromBlock = await resolveFromBlock(provider, 0n)
+          try {
+            logs = await provider.getLogs({
+              address: contractAddress,
+              topics: [answerSubmittedTopic, null, zeroPadQuestionId(i)],
+              fromBlock: baseFromBlock,
+            })
+          } catch (err: any) {
+            if (isTinyRangeError(err)) {
+              logs = await fetchLogsChunked(provider, {
+                address: contractAddress,
+                topics: [answerSubmittedTopic, null, zeroPadQuestionId(i)],
+                fromBlock: baseFromBlock,
+              })
+            } else {
+              throw err
+            }
+          }
           logs.forEach((log) => {
             const parsed = iface.parseLog(log)
             if (!parsed) return
