@@ -26,6 +26,7 @@ export const QUIZ_GAME_ABI = [
   "function getQuestionState(uint256 _questionId) public view returns (bool isActive, bool isRevealed, address creator)",
   "function submitAnswer(uint256 _questionId, uint8 _answer) public",
   "function hasPlayerAnswered(uint256 _questionId, address _player) public view returns (bool)",
+  "function playerAnswers(uint256 _questionId, address _player) public view returns (uint8)",
   "function getCorrectAnswer(uint256 _questionId) public view returns (uint8)",
   
   // Score functions

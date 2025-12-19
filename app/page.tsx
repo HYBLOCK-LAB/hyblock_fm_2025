@@ -7,7 +7,6 @@ import Registration from './components/Registration'
 import QuizGame from './components/QuizGame'
 import ContractError from './components/ContractError'
 import Header from './components/Header'
-import AdminQuestionForm from './components/AdminQuestionForm'
 import Card from './components/ui/Card'
 import Button from './components/ui/Button'
 import FeatureCard from './components/ui/FeatureCard'
@@ -23,7 +22,6 @@ export default function Home() {
   const [contractError, setContractError] = useState<boolean>(false)
   const [playerName, setPlayerName] = useState<string>('')
   const [score, setScore] = useState<number>(getStoredScore())
-  const [isOwner, setIsOwner] = useState<boolean>(false)
 
   const userAddress = address || ''
 
@@ -87,28 +85,10 @@ export default function Home() {
   }, [contract, userAddress])
 
   useEffect(() => {
-    const checkOwner = async () => {
-      if (!contract || !userAddress) {
-        setIsOwner(false)
-        return
-      }
-      try {
-        const owner = await contract.getOwner()
-        setIsOwner(owner.toLowerCase() === userAddress.toLowerCase())
-      } catch (err: any) {
-        console.error('Failed to fetch owner address:', err)
-        setIsOwner(false)
-      }
-    }
-    checkOwner()
-  }, [contract, userAddress])
-
-  useEffect(() => {
     if (!isConnected) {
       setIsRegistered(false)
       setContractError(false)
       setPlayerName('')
-      setIsOwner(false)
       setScore(0)
       clearStoredScore()
     }
@@ -126,11 +106,6 @@ export default function Home() {
 
       <main className="main-content">
         <div className="container">
-          {/* Admin: create questions */}
-          {contract && isOwner && !contractError && (
-            <AdminQuestionForm contract={contract} />
-          )}
-
           {/* Welcome Message */}
           {userAddress && playerName && (
             <div className="welcome-section">
